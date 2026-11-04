@@ -304,6 +304,120 @@ def make_strike_motion(rng, T, fps=30.0):
 
 
 # ------------------------------------------------------------------ labels
+# Visibility ("is this keypoint seen in this view?") is decided from what the picture shows at the keypoint's
+# pixel: the keypoint counts as seen when the first surface its camera ray (or a ray a few pixels around it) hits
+# belongs to the keypoint's own body segment - the bone it sits on, the bone above it or a bone below it.  A joint
+# inside the body (the pelvis root, a shoulder) is therefore seen whenever its own segment faces the camera; it is
+# hidden only when ANOTHER part (an arm in front of the chest, the body in front of the far hand) covers it.
+# The older test ("does the ray from the camera to the joint cross more than one surface") marked every joint
+# that lies inside thick skin as hidden, even when nothing else covered it.
+VIS_MODE = opt.get("visibility", "segment")
+VIS_WINDOW_PX = 3.0
+_ACT = set(active)
+
+
+def _carrier(i):
+    """The bone whose motion carries bone i: nearest active bone at or above it, else its chain's top bone."""
+    j = i
+    while j >= 0 and j not in _ACT:
+        j = rig["bones"][j]["parent"]
+    if j >= 0:
+        return j
+    j = i
+    while rig["bones"][j]["parent"] >= 0:
+        j = rig["bones"][j]["parent"]
+    return j
+
+
+def _triangle_carriers():
+    """Carrier bone of every triangle in the same order as bvh_from_meshes (meshes in order, evaluated loop
+    triangles): the carrier with the largest summed skin weight over the triangle's three vertices."""
+    by_name = {b["name"]: i for i, b in enumerate(rig["bones"])}
+    dg = bpy.context.evaluated_depsgraph_get()
+    out = []
+    for m in meshes:
+        gname = {g.index: g.name for g in m.vertex_groups}
+        vw = []
+        for v in m.data.vertices:
+            d = {}
+            for g in v.groups:
+                bi = by_name.get(gname.get(g.group))
+                if bi is not None and g.weight > 1e-3:
+                    c = _carrier(bi)
+                    d[c] = d.get(c, 0.0) + g.weight
+            vw.append(d)
+        ev = m.evaluated_get(dg)
+        me = ev.to_mesh()
+        me.calc_loop_triangles()
+        for tri in me.loop_triangles:
+            s = {}
+            for vi in tri.vertices:
+                for c, w in vw[vi].items():
+                    s[c] = s.get(c, 0.0) + w
+            out.append(max(s, key=s.get) if s else -1)
+        ev.to_mesh_clear()
+    return np.array(out, int)
+
+
+def _keypoint_segments():
+    """Allowed carriers per keypoint: its own bone's, its parent's and its children's."""
+    kids = {i: [j for j, b in enumerate(rig["bones"]) if b["parent"] == i] for i in range(B)}
+    out = []
+    for k in rig["keypoints"]:
+        b = k["bone"]
+        s = {_carrier(b)}
+        if rig["bones"][b]["parent"] >= 0:
+            s.add(_carrier(rig["bones"][b]["parent"]))
+        s |= {_carrier(j) for j in kids[b]}
+        out.append(s)
+    return out
+
+
+TRI_CARRIER = _triangle_carriers() if VIS_MODE == "segment" else None
+KP_SEGMENTS = _keypoint_segments() if VIS_MODE == "segment" else None
+_WIN = [(0.0, 0.0)] + [(VIS_WINDOW_PX * math.cos(a), VIS_WINDOW_PX * math.sin(a))
+                       for a in np.linspace(0, 2 * math.pi, 8, endpoint=False)]
+
+
+def _vis_segment(c, p, bvh):
+    K_, R_, t_ = np.array(c["K"]), np.array(c["R"]), np.array(c["t"])
+    Kinv = np.linalg.inv(K_)
+    C = -R_.T @ t_
+    o = Vector(C.tolist())
+    far = 20.0 * float(studio.get("distance", 10.0 * size))
+    vis = np.zeros(K)
+    for k in range(K):
+        for du, dv in _WIN:
+            d = R_.T @ (Kinv @ np.array([p[k, 0] + du, p[k, 1] + dv, 1.0]))
+            d = d / np.linalg.norm(d)
+            hit = bvh.ray_cast(o, Vector(d.tolist()), far)
+            if hit[0] is not None and hit[2] is not None and TRI_CARRIER[hit[2]] in KP_SEGMENTS[k]:
+                vis[k] = 1.0
+                break
+    return vis
+
+
+def _vis_ray(c, kp, bvh):
+    cam_pos = np.array(c["blender"]["loc"])
+    vis = np.zeros(K)
+    for k in range(K):
+        d = kp[k] - cam_pos
+        dist = np.linalg.norm(d)
+        dn = Vector((d / dist).tolist())
+        # count surface crossings between camera and joint: 0/1 = visible, >=2 = something in front
+        o, travelled, n_hit = Vector(cam_pos.tolist()), 0.0, 0
+        while n_hit < 4:
+            hit = bvh.ray_cast(o, dn, dist - travelled)
+            if hit[0] is None:
+                break
+            n_hit += 1
+            step = hit[3] + 1e-4 * size
+            travelled += step
+            o = o + dn * step
+        vis[k] = 1.0 if n_hit <= 1 else 0.0
+    return vis
+
+
 def labels_for_current_pose():
     bpy.context.view_layer.update()
     kp = keypoints_world(arm, rig)
@@ -311,25 +425,8 @@ def labels_for_current_pose():
     out = {}
     for c in studio["cams"]:
         p = project(c, kp)
-        cam_pos = np.array(c["blender"]["loc"])
-        vis = np.zeros(K)
-        for k in range(K):
-            d = kp[k] - cam_pos
-            dist = np.linalg.norm(d)
-            dn = Vector((d / dist).tolist())
-            # count surface crossings between camera and joint: 0/1 = visible (the joint
-            # sits inside its own body part), >=2 = something else is in front of it
-            o, travelled, n_hit = Vector(cam_pos.tolist()), 0.0, 0
-            while n_hit < 4:
-                hit = bvh.ray_cast(o, dn, dist - travelled)
-                if hit[0] is None:
-                    break
-                n_hit += 1
-                step = hit[3] + 1e-4 * size
-                travelled += step
-                o = o + dn * step
-            vis[k] = 1.0 if n_hit <= 1 else 0.0
         inside = (p[:, 0] >= 0) & (p[:, 0] < c["w"]) & (p[:, 1] >= 0) & (p[:, 1] < c["h"])
+        vis = _vis_segment(c, p, bvh) if VIS_MODE == "segment" else _vis_ray(c, kp, bvh)
         out[c["name"]] = {"uvz": p, "vis": vis * inside}
     return kp, out
 

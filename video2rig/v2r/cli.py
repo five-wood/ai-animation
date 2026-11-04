@@ -84,7 +84,8 @@ def cmd_gen(a):
         if os.path.exists(os.path.join(out, f"meta_{start:06d}.json")):
             continue
         opt = json.dumps({"mode": "random", "n": n, "start": start, "seed": a.seed,
-                          "fast_frac": a.fast_frac, "samples": a.samples, "contact_poses": a.contact_poses})
+                          "fast_frac": a.fast_frac, "samples": a.samples, "contact_poses": a.contact_poses,
+                          "visibility": a.visibility})
         cmd = [BLENDER, "-b", "--factory-startup", "--python", os.path.join(BL_DIR, "gen_poses.py"), "--",
                os.path.abspath(a.project), os.path.abspath(out), opt]
         procs.append(subprocess.Popen(cmd, stdout=open(os.path.join(logs, f"gen_{start:06d}.log"), "w"),
@@ -172,6 +173,9 @@ def main(argv=None):
     s.add_argument("--fresh", action="store_true")
     s.add_argument("--contact-poses", action="store_true",
                    help="about a third of the poses bring both hands together or lay one hand on the body")
+    s.add_argument("--visibility", default="segment", choices=["segment", "ray"],
+                   help="segment: a keypoint is seen when the surface at its pixel is its own body segment; "
+                        "ray: the older 'camera-to-joint ray crosses at most one surface' test")
     s.set_defaults(fn=cmd_gen)
     s = sub.add_parser("train")
     s.add_argument("project")
