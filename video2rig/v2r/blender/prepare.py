@@ -24,7 +24,9 @@ rig = extract_rig(arm, meshes, facing=opt.get("facing", "-Y"),
                   min_seg_frac=opt.get("min_seg_frac", 0.06),
                   keep_bones=opt.get("keep_bones"),
                   limits_override=opt.get("limits"),
-                  limits_mode=opt.get("limits_mode", "anatomical"))
+                  limits_mode=opt.get("limits_mode", "anatomical"),
+                  fist_points=bool(opt.get("fist_points")),
+                  offaxis_points=bool(opt.get("offaxis_points")))
 rig["model"] = os.path.abspath(model)
 rig["up"] = opt.get("up", "+Z")
 studio = make_studio(rig, panel_w=opt.get("panel_w", 640), panel_h=opt.get("panel_h", 720),

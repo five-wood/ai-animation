@@ -67,7 +67,7 @@ def calibrate_first_frame(project, rig, uv, conf, n0=3):
 
 
 def animate(project, video, name=None, split="auto", swap=False, fps=None, max_frames=None, force=False,
-            device="cuda", render=True, iters=1500, calib_mode="auto", solver="legacy"):
+            device="cuda", render=True, iters=1500, calib_mode="auto", solver="legacy", tta=1):
     t0 = time.time()
     rig = json.load(open(os.path.join(project, "rig.json")))
     studio = json.load(open(os.path.join(project, "studio.json")))
@@ -94,10 +94,10 @@ def animate(project, video, name=None, split="auto", swap=False, fps=None, max_f
     t1 = time.time()
     heat_quality = None
     if solver == "temporal":
-        uv, conf, dep, heat_quality = run_reader(model, st, panels, device, return_quality=True)
+        uv, conf, dep, heat_quality = run_reader(model, st, panels, device, return_quality=True, tta=tta)
     else:
-        uv, conf, dep = run_reader(model, st, panels, device)
-    print(f"[v2r] joints read in {time.time() - t1:.1f}s")
+        uv, conf, dep = run_reader(model, st, panels, device, tta=tta)
+    print(f"[v2r] joints read in {time.time() - t1:.1f}s" + (f" ({tta} averaged reads per panel)" if tta > 1 else ""))
     del model
     uv_reader = uv.copy()
     calib = calibrate_first_frame(project, rig, uv, conf) if calib_mode != "off" else None
@@ -150,7 +150,10 @@ def animate(project, video, name=None, split="auto", swap=False, fps=None, max_f
         conf_s, weight_details = observation_weights(rig, studio, uv, conf, res, fps, heat_quality)
         np.savez(os.path.join(out,"observation_weights.npz"), **weight_details)
         X_fit, _ = triangulate_all(cams, uv, conf_s)
-        sol = fit_temporal(rig,studio,uv,conf_s,X_fit,fps,depth=dep,device=device)
+        # robust acceleration penalties keep abrupt stops (impacts) sharp; see
+        # work/analyze/research/前沿对照与优化路线.md for the A/B on m11101 and lizard
+        sol = fit_temporal(rig,studio,uv,conf_s,X_fit,fps,depth=dep,device=device,
+                           robust_pos=0.003,robust_rot=0.02)
         with open(os.path.join(out,"solver.json"),"w") as f:
             json.dump(sol["solver_info"],f,indent=1)
         print(f"[v2r] experimental reliability weights: median {np.median(conf_s):.3f}; "

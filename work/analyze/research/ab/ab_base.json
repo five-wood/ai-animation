@@ -1,0 +1,296 @@
+{
+ "legacy": {
+  "real": {
+   "step_deg[Bone146]": 0.6530142426490784,
+   "jerk_deg[Bone146]": 0.5726361274719238,
+   "step_deg[Bip001 R Hand]": 3.140894651412964,
+   "jerk_deg[Bip001 R Hand]": 1.6514564752578735,
+   "step_deg[Bip001 L Hand]": 3.724602222442627,
+   "jerk_deg[Bip001 L Hand]": 1.4099007844924927,
+   "step_deg[Bip001 R Forearm]": 2.5008704662323,
+   "jerk_deg[Bip001 R Forearm]": 1.339693546295166,
+   "step_deg[Bip001 L Forearm]": 4.110071182250977,
+   "jerk_deg[Bip001 L Forearm]": 1.5357675552368164,
+   "step_deg[Bone142]": 0.7514596581459045,
+   "jerk_deg[Bone142]": 0.3495132625102997,
+   "step_deg[Bone0022]": 0.8714403510093689,
+   "jerk_deg[Bone0022]": 0.5295658111572266,
+   "local_jerk_rms_deg": 1.9192897081375122,
+   "res_px_median_all": 2.730240821838379,
+   "res_px_median_hands": 8.491011619567871,
+   "res_px_median_body": 2.016298294067383,
+   "impact": [
+    {
+     "peak_pct": 7.335453987121582,
+     "stop_frames": 4,
+     "peak_decel_pct": 2.609910488128662,
+     "read_peak_pct": 13.559489250183105
+    },
+    {
+     "peak_pct": 12.464530944824219,
+     "stop_frames": 3,
+     "peak_decel_pct": 5.425956726074219,
+     "read_peak_pct": 13.593713760375977
+    },
+    {
+     "peak_pct": 14.204184532165527,
+     "stop_frames": 2,
+     "peak_decel_pct": 5.831699371337891,
+     "read_peak_pct": 17.886184692382812
+    }
+   ],
+   "impact_peak_mean_pct": 11.334723154703775,
+   "impact_stop_frames_mean": 3.0,
+   "impact_decel_mean_pct": 4.622522195180257
+  },
+  "exam": {
+   "joint_err_mean_pct_of_size": 1.452217936515808,
+   "bone_angle_mean_deg": 8.745057224551966,
+   "bone_angle_p90_deg": 18.813887897208097,
+   "twist_mean_deg": 7.442403653777757,
+   "passed": true,
+   "per_bone": {
+    "Bip001 Pelvis": [
+     4.73,
+     3.71
+    ],
+    "Bip001 Spine": [
+     1.46,
+     0.67
+    ],
+    "Bip001 Spine1": [
+     2.85,
+     5.89
+    ],
+    "Bip001 Neck": [
+     7.14,
+     3.97
+    ],
+    "Bip001 L Clavicle": [
+     9.53,
+     8.14
+    ],
+    "Bip001 L UpperArm": [
+     12.41,
+     14.36
+    ],
+    "Bip001 L Forearm": [
+     11.17,
+     10.08
+    ],
+    "Bip001 L Hand": [
+     18.38,
+     8.93
+    ],
+    "Bip001 R Clavicle": [
+     8.96,
+     6.48
+    ],
+    "Bip001 R UpperArm": [
+     9.98,
+     13.51
+    ],
+    "Bip001 R Forearm": [
+     10.47,
+     17.21
+    ],
+    "Bip001 R Hand": [
+     18.53,
+     15.01
+    ],
+    "Bip001 Head": [
+     1.89,
+     2.57
+    ],
+    "Bone001": [
+     4.5,
+     2.93
+    ],
+    "Bone002": [
+     4.07,
+     4.43
+    ],
+    "Bone142": [
+     3.93,
+     6.47
+    ],
+    "Bone0013": [
+     4.21,
+     3.24
+    ],
+    "Bone0021": [
+     4.04,
+     3.31
+    ],
+    "Bone0022": [
+     3.71,
+     3.47
+    ],
+    "Bone146": [
+     9.91,
+     2.7
+    ],
+    "Bip001 L Thigh": [
+     20.84,
+     13.81
+    ],
+    "Bip001 R Thigh": [
+     8.45,
+     11.56
+    ],
+    "Bone004": [
+     19.97,
+     8.72
+    ]
+   }
+  },
+  "seconds": 103.36926054954529
+ },
+ "temporal": {
+  "real": {
+   "step_deg[Bone146]": 0.32092851400375366,
+   "jerk_deg[Bone146]": 0.1287488043308258,
+   "step_deg[Bip001 R Hand]": 1.1488217115402222,
+   "jerk_deg[Bip001 R Hand]": 0.25133898854255676,
+   "step_deg[Bip001 L Hand]": 1.4286364316940308,
+   "jerk_deg[Bip001 L Hand]": 0.28080523014068604,
+   "step_deg[Bip001 R Forearm]": 1.8275587558746338,
+   "jerk_deg[Bip001 R Forearm]": 0.4915272295475006,
+   "step_deg[Bip001 L Forearm]": 3.1488993167877197,
+   "jerk_deg[Bip001 L Forearm]": 0.6280935406684875,
+   "step_deg[Bone142]": 0.3858218789100647,
+   "jerk_deg[Bone142]": 0.07216210663318634,
+   "step_deg[Bone0022]": 0.4299682080745697,
+   "jerk_deg[Bone0022]": 0.09344357997179031,
+   "local_jerk_rms_deg": 0.6122488379478455,
+   "res_px_median_all": 2.8082423210144043,
+   "res_px_median_hands": 8.42521858215332,
+   "res_px_median_body": 2.0129833221435547,
+   "impact": [
+    {
+     "peak_pct": 5.290558815002441,
+     "stop_frames": 2,
+     "peak_decel_pct": 1.5615434646606445,
+     "read_peak_pct": 13.559489250183105
+    },
+    {
+     "peak_pct": 8.720588684082031,
+     "stop_frames": 4,
+     "peak_decel_pct": 2.3659653663635254,
+     "read_peak_pct": 13.593713760375977
+    },
+    {
+     "peak_pct": 8.974966049194336,
+     "stop_frames": 4,
+     "peak_decel_pct": 2.3885996341705322,
+     "read_peak_pct": 17.886184692382812
+    }
+   ],
+   "impact_peak_mean_pct": 7.6620378494262695,
+   "impact_stop_frames_mean": 3.3333333333333335,
+   "impact_decel_mean_pct": 2.105369488398234
+  },
+  "exam": {
+   "joint_err_mean_pct_of_size": 1.5807116031646729,
+   "bone_angle_mean_deg": 9.122045972252266,
+   "bone_angle_p90_deg": 19.93727377966407,
+   "twist_mean_deg": 7.1158856543746545,
+   "passed": true,
+   "per_bone": {
+    "Bip001 Pelvis": [
+     4.29,
+     3.46
+    ],
+    "Bip001 Spine": [
+     1.35,
+     0.61
+    ],
+    "Bip001 Spine1": [
+     2.54,
+     6.01
+    ],
+    "Bip001 Neck": [
+     7.02,
+     3.62
+    ],
+    "Bip001 L Clavicle": [
+     9.39,
+     7.48
+    ],
+    "Bip001 L UpperArm": [
+     12.05,
+     13.6
+    ],
+    "Bip001 L Forearm": [
+     16.55,
+     11.08
+    ],
+    "Bip001 L Hand": [
+     24.61,
+     8.14
+    ],
+    "Bip001 R Clavicle": [
+     8.41,
+     6.08
+    ],
+    "Bip001 R UpperArm": [
+     9.92,
+     11.39
+    ],
+    "Bip001 R Forearm": [
+     9.79,
+     16.83
+    ],
+    "Bip001 R Hand": [
+     17.09,
+     13.59
+    ],
+    "Bip001 Head": [
+     1.72,
+     2.34
+    ],
+    "Bone001": [
+     4.26,
+     2.7
+    ],
+    "Bone002": [
+     3.31,
+     4.26
+    ],
+    "Bone142": [
+     3.18,
+     6.3
+    ],
+    "Bone0013": [
+     3.95,
+     2.84
+    ],
+    "Bone0021": [
+     3.9,
+     2.85
+    ],
+    "Bone0022": [
+     3.03,
+     2.93
+    ],
+    "Bone146": [
+     9.69,
+     2.49
+    ],
+    "Bip001 L Thigh": [
+     21.82,
+     13.53
+    ],
+    "Bip001 R Thigh": [
+     12.42,
+     12.91
+    ],
+    "Bone004": [
+     19.53,
+     8.65
+    ]
+   }
+  },
+  "seconds": 105.2904839515686
+ }
+}

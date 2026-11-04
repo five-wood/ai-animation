@@ -40,7 +40,8 @@ def cmd_prepare(a):
     opt = {"facing": a.facing, "up": a.up, "procedural_material": a.procedural_material, "fill": a.fill,
            "panel_w": a.panel_w, "panel_h": a.panel_h, "min_seg_frac": a.min_seg, "keep_bones": a.keep_bones,
            "visual_profile": a.visual_profile, "geometry_from": a.geometry_from,
-           "limits_mode": "generic" if a.generic_limits else "anatomical"}
+           "limits_mode": "generic" if a.generic_limits else "anatomical",
+           "fist_points": a.fist_points, "offaxis_points": a.offaxis_points}
     if a.limits:
         opt["limits"] = json.load(open(a.limits))
     os.makedirs(a.project, exist_ok=True)
@@ -83,7 +84,7 @@ def cmd_gen(a):
         if os.path.exists(os.path.join(out, f"meta_{start:06d}.json")):
             continue
         opt = json.dumps({"mode": "random", "n": n, "start": start, "seed": a.seed,
-                          "fast_frac": a.fast_frac, "samples": a.samples})
+                          "fast_frac": a.fast_frac, "samples": a.samples, "contact_poses": a.contact_poses})
         cmd = [BLENDER, "-b", "--factory-startup", "--python", os.path.join(BL_DIR, "gen_poses.py"), "--",
                os.path.abspath(a.project), os.path.abspath(out), opt]
         procs.append(subprocess.Popen(cmd, stdout=open(os.path.join(logs, f"gen_{start:06d}.log"), "w"),
@@ -99,22 +100,22 @@ def cmd_gen(a):
 def cmd_train(a):
     from v2r.train import train
     train(a.project, epochs=a.epochs, batch=a.batch, lr=a.lr, backbone=a.backbone, img=a.img,
-          workers=a.workers)
+          workers=a.workers, steps=a.steps, hidden_empty=a.hidden_empty, smear_frac=a.smear)
 
 
 def cmd_exam(a):
     if a.regrade:
         from v2r.exam import regrade
-        regrade(a.project)
+        regrade(a.project, style=a.style)
         return
     from v2r.exam import exam
-    exam(a.project, frames=a.frames, seed=a.seed, render=not a.reuse, compress=not a.clean)
+    exam(a.project, frames=a.frames, seed=a.seed, render=not a.reuse, compress=not a.clean, style=a.style)
 
 
 def cmd_animate(a):
     from v2r.pipeline import animate
     animate(a.project, a.video, name=a.name, split=a.split, swap=a.swap, fps=a.fps,
-            max_frames=a.max_frames, force=a.force, calib_mode=a.calib, solver=a.solver)
+            max_frames=a.max_frames, force=a.force, calib_mode=a.calib, solver=a.solver, tta=a.tta)
 
 
 def cmd_stabilize(a):
@@ -149,6 +150,10 @@ def main(argv=None):
     s.add_argument("--limits", help="json {bone-regex: [[x0,x1],[y0,y1],[z0,z1]]} in degrees (overrides the rest)")
     s.add_argument("--generic-limits", action="store_true",
                    help="old fixed Euler boxes instead of per-joint anatomical ranges")
+    s.add_argument("--fist-points", action="store_true",
+                   help="a closed hand keeps its wrist point and one knuckle point instead of every finger point")
+    s.add_argument("--offaxis-points", action="store_true",
+                   help="two skin points off the bone's line on each hand and on the head (shows their twist)")
     s.add_argument("--fill", type=float, default=0.68)
     s.add_argument("--min-seg", type=float, default=0.06,
                    help="bones shorter than this fraction of the body size are folded into their parent")
@@ -165,6 +170,8 @@ def main(argv=None):
     s.add_argument("--fast-frac", type=float, default=0.5)
     s.add_argument("--samples", type=int, default=16)
     s.add_argument("--fresh", action="store_true")
+    s.add_argument("--contact-poses", action="store_true",
+                   help="about a third of the poses bring both hands together or lay one hand on the body")
     s.set_defaults(fn=cmd_gen)
     s = sub.add_parser("train")
     s.add_argument("project")
@@ -174,6 +181,12 @@ def main(argv=None):
     s.add_argument("--img", type=int, default=448)
     s.add_argument("--workers", type=int, default=12)
     s.add_argument("--backbone", default="vit_base_patch14_dinov2.lvd142m")
+    s.add_argument("--steps", type=int, default=None,
+                   help="train exactly this many optimiser steps (overrides --epochs)")
+    s.add_argument("--hidden-empty", action="store_true",
+                   help="keypoints hidden by the body get an empty target: the reader learns a low peak there")
+    s.add_argument("--smear", type=float, default=0.0,
+                   help="share of training pictures with a limb smeared into a streak, e.g. 0.3")
     s.set_defaults(fn=cmd_train)
     s = sub.add_parser("exam")
     s.add_argument("project")
@@ -183,6 +196,9 @@ def main(argv=None):
     s.add_argument("--clean", action="store_true", help="no Seedance-like compression on the exam video")
     s.add_argument("--regrade", action="store_true",
                    help="only grade the existing out/exam/motion.npz again (no render, no solve)")
+    s.add_argument("--style", default="smooth", choices=["smooth", "strike"],
+                   help="strike: abrupt-stop moves graded for impact fidelity, kept in exam_strike/ "
+                        "(the standard exam/ is untouched)")
     s.set_defaults(fn=cmd_exam)
     s = sub.add_parser("contact")
     s.add_argument("project")
@@ -212,6 +228,9 @@ def main(argv=None):
                    help="temporal: experimental reliability fusion + fps-normalized joint solve")
     s.add_argument("--calib", default="auto", choices=["auto", "off"],
                    help="frame-0 re-framing correction (video starts from the reference picture)")
+    s.add_argument("--tta", type=int, default=1,
+                   help="read every panel N times (shifted / zoomed a little) and average the heatmaps; "
+                        "about N times slower to read, small gain with the current reader (see work/analyze/research)")
     s.set_defaults(fn=cmd_animate)
     a = p.parse_args(argv)
     a.fn(a)

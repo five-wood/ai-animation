@@ -17,28 +17,47 @@ from v2r.geom import (Skeleton, Cams, rot6d_to_mat, mat_to_rot6d,
 from v2r.solve import fit as legacy_fit
 
 
-def rotation_acceleration_loss(R, fps):
+def robust_square(x2, scale):
+    """Squared magnitude x2 -> Charbonnier-type penalty: x2 for small values, ~2*scale*|x| for
+    large ones.  scale <= 0 keeps the plain square (legacy behaviour)."""
+    if scale <= 0:
+        return x2
+    s2 = scale * scale
+    return 2 * s2 * (torch.sqrt(1 + x2 / s2) - 1)
+
+
+def rotation_acceleration_loss(R, fps, robust=0.):
     """R (T,...,3,3). Chordal acceleration of body-frame relative rotations.
 
     Constant world angular velocity also gives constant body relative increments.
     Dividing a matrix difference by sqrt(2) matches small-angle vector magnitudes.
+    robust > 0: large accelerations (abrupt stops) are penalised linearly, not quadratically.
     """
     if len(R) < 3:
         return R.sum() * 0
     delta = R[:-1].transpose(-1, -2) @ R[1:]
     accel = (delta[1:] - delta[:-1]) * (float(fps) / 30.0) ** 2
-    return accel.square().sum((-1, -2)).mean() * .5
+    return robust_square(accel.square().sum((-1, -2)) * .5, robust).mean()
 
 
 def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
                  device="cuda", warm_iters=900, verbose=True, initial=None,
                  position_strength=400., local_strength=24., root_strength=40.,
                  stationary_starts=None, stationary_segment_weights=None, stationary_anchor_strength=0.,
-                 depth_mode="numeric", depth_strength=.025, order_config=None):
+                 depth_mode="numeric", depth_strength=.025, order_config=None,
+                 robust_pos=0., robust_rot=0., front_vertical=1.0):
     """Warm fit followed by coupled root/local temporal refinement, no post-filter.
 
     `initial` is optional for controlled ablations. When omitted, a bounded legacy fit
     provides a common pose basin. No source file is mutated. Limits remain enforced.
+
+    robust_pos / robust_rot (0 = off, the original quadratic penalties): Charbonnier scale of
+    the world keypoint acceleration (body-size units, 30Hz reference) and of the local rotation
+    acceleration.  Accelerations well below the scale are still penalised quadratically (jitter);
+    larger ones only linearly, so abrupt stops are not smeared over several frames.
+    Measured 2026-11-04 (work/analyze/research): 0.003 / 0.02 kept jitter at the temporal level
+    and restored impacts to about the legacy level on m11101 and lizard (real clip + smooth exam
+    + strike exam).
     """
     if depth_mode not in ("off","numeric","order"):
         raise ValueError("Unknown depth mode")
@@ -68,7 +87,7 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
             raise ValueError("Unsupported stationary entries must have zero weight")
     if initial is None:
         initial = legacy_fit(rig, studio, uv, weights, X3, depth=depth if depth_mode=="numeric" else None,
-                             iters=warm_iters, device=device, verbose=verbose, fps=fps)
+                             iters=warm_iters, device=device, verbose=verbose, fps=fps, front_vertical=front_vertical)
     sk = Skeleton(rig, device=device)
     cams = Cams(studio, device=device)
     td = lambda x: torch.tensor(np.asarray(x), dtype=torch.float32, device=device)
@@ -101,6 +120,8 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
     scale_px = float(np.median(np.ptp(uv.reshape(-1, uv.shape[2], 2), axis=1).max(-1)))
     scale_px = max(scale_px, 1.)
     dt_scale2 = (fps / 30.) ** 2
+    from v2r.solve import view_axis_weights
+    axis_w = view_axis_weights(studio, front_vertical, device)
 
     def forward():
         R = rot6d_to_mat(r6)
@@ -112,7 +133,7 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
     def objective():
         R, G, E, world, kp = forward()
         pred, z = cams.project_t(kp)
-        e2 = ((pred - t_uv) / scale_px).square().sum(-1)
+        e2 = (((pred - t_uv) / scale_px).square() * axis_w[None, :, None, :]).sum(-1)
         # Same robust image term as legacy for an interpretable comparison.
         image = (t_w * (e2 / (e2 + .03 ** 2)) * .03 ** 2 * 1000).mean() / norm
         pos3 = (w3 * ((kp-t_X).square().sum(-1) / sk.size ** 2).clamp(max=.04)).mean() * .5 / norm
@@ -120,8 +141,8 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
         info = {"image": image, "tri3d": pos3}
         if T > 2:
             a = (kp[2:] - 2*kp[1:-1] + kp[:-2]) / sk.size * dt_scale2
-            world_acc = a.square().sum(-1).mean() * position_strength
-            local_acc = rotation_acceleration_loss(euler_xyz_t(E), fps) * local_strength
+            world_acc = robust_square(a.square().sum(-1), robust_pos).mean() * position_strength
+            local_acc = rotation_acceleration_loss(euler_xyz_t(E), fps, robust_rot) * local_strength
             root_acc = rotation_acceleration_loss(R, fps) * root_strength
             centre_acc = (tr[2:] - 2*tr[1:-1] + tr[:-2]) / sk.size * dt_scale2
             centre_acc = centre_acc.square().sum(-1).mean() * position_strength
@@ -181,6 +202,7 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
                            "warm_iters":warm_iters,"refine_iters":iters,
                            "position_strength":position_strength,"local_strength":local_strength,
                            "root_strength":root_strength,
+                           "robust_pos":robust_pos,"robust_rot":robust_rot,"front_vertical":front_vertical,
                            "objective":float(loss),"terms":{k:float(v) for k,v in info.items()},
                            "contact_constraints":False,"post_filter":False,
                            "image_stationary_segment_strength":stationary_anchor_strength,

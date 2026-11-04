@@ -73,9 +73,68 @@ def split_views(frame, split, studio, swap=False):
     return out, boxes
 
 
+def tta_views(n, shift=4.0, zoom=0.04):
+    """n read copies as (scale, dx, dy) in net-input pixels: the picture itself first, then copies on a ring of
+    `shift` px, alternately zoomed in and out by `zoom` about the net input's centre.  Deterministic, so a
+    clip reads the same every time."""
+    out = [(1.0, 0.0, 0.0)]
+    for k in range(1, n):
+        a = 2.0 * np.pi * (k - 1) / max(n - 1, 1)
+        out.append((1.0 + (zoom if k % 2 else -zoom), shift * float(np.cos(a)), shift * float(np.sin(a))))
+    return out
+
+
+def _copy_affine(W, H, s, dx, dy):
+    """3x3 net-input -> copy net-input similarity: scale s about the centre, then shift (dx, dy)."""
+    cx, cy = W / 2.0, H / 2.0
+    return np.array([[s, 0.0, (1 - s) * cx + dx], [0.0, s, (1 - s) * cy + dy], [0.0, 0.0, 1.0]])
+
+
+def _back_grid(W, H, hw, hh, A, device):
+    """grid_sample grid that samples a copy's heatmap at every base heatmap cell (align_corners=False).
+    Base heat cell (j, i) covers net-input pixel ((j + .5) W/hw, (i + .5) H/hh); the copy saw that point
+    at A @ x; normalised copy coordinate = 2 x' / size - 1."""
+    xs = (np.arange(hw) + 0.5) * W / hw
+    ys = (np.arange(hh) + 0.5) * H / hh
+    gx, gy = np.meshgrid(xs, ys)
+    X = A[0, 0] * gx + A[0, 1] * gy + A[0, 2]
+    Y = A[1, 0] * gx + A[1, 1] * gy + A[1, 2]
+    g = np.stack([2 * X / W - 1, 2 * Y / H - 1], -1).astype(np.float32)
+    return torch.from_numpy(g)[None].to(device)
+
+
 @torch.no_grad()
-def _read_pass(model, st, panels_per_frame, mats, device, batch, return_quality=False):
-    """mats[t][v]: 2x3 panel->net matrix. Returns uv in panel px, conf, depth."""
+def _forward_tta(model, panels, Ms, view, W, H, hw, hh, copies, device):
+    """Read each panel once per copy, bring every copy's probability / depth maps back onto the base
+    copy's grid and average them.  Returns heat logits (of the averaged probability) and depth maps."""
+    import torch.nn.functional as F
+    prob_sum, dep_sum = None, None
+    for s, dx, dy in copies:
+        A = _copy_affine(W, H, s, dx, dy)
+        ims = []
+        for img, M in zip(panels, Ms):
+            Mc = (A @ np.vstack([M, [0.0, 0.0, 1.0]]))[:2].astype(np.float32)
+            interp = cv2.INTER_LINEAR if Mc[0, 0] >= 1 else cv2.INTER_AREA
+            ims.append(to_tensor(cv2.warpAffine(img, Mc, (W, H), flags=interp, borderMode=cv2.BORDER_REPLICATE)))
+        x = torch.stack(ims).to(device)
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            hm, dp = model(x, view)
+        pr, dp = torch.sigmoid(hm.float()), dp.float()
+        if (s, dx, dy) != (1.0, 0.0, 0.0):
+            grid = _back_grid(W, H, hw, hh, A, device).expand(pr.shape[0], -1, -1, -1)
+            pr = F.grid_sample(pr, grid, mode="bilinear", padding_mode="zeros", align_corners=False)
+            dp = F.grid_sample(dp, grid, mode="bilinear", padding_mode="border", align_corners=False)
+        prob_sum = pr if prob_sum is None else prob_sum + pr
+        dep_sum = dp if dep_sum is None else dep_sum + dp
+    p = (prob_sum / len(copies)).clamp(1e-6, 1 - 1e-6)
+    return torch.log(p / (1 - p)), dep_sum / len(copies)
+
+
+@torch.no_grad()
+def _read_pass(model, st, panels_per_frame, mats, device, batch, return_quality=False, tta=1):
+    """mats[t][v]: 2x3 panel->net matrix. Returns uv in panel px, conf, depth.
+    tta > 1: every panel is read that many times (tta_views) and the heatmaps are averaged before decoding;
+    a reading error that does not repeat between the shifted copies shrinks in the average."""
     W, H = st["net_wh"]
     hw, hh = st["heat_wh"]
     T = len(panels_per_frame)
@@ -85,18 +144,12 @@ def _read_pass(model, st, panels_per_frame, mats, device, batch, return_quality=
     conf = np.zeros((T, V, st["K"]), np.float32)
     dep = np.zeros((T, V, st["K"]), np.float32)
     quality = {k: np.zeros_like(dep) for k in ("ambiguity_ratio", "spread_px")}
+    copies = tta_views(int(tta)) if tta and int(tta) > 1 else [(1.0, 0.0, 0.0)]
     for i in range(0, len(items), batch):
         chunk = items[i:i + batch]
-        ims = []
-        for t, v in chunk:
-            M = mats[t][v]
-            interp = cv2.INTER_LINEAR if M[0, 0] >= 1 else cv2.INTER_AREA
-            ims.append(to_tensor(cv2.warpAffine(panels_per_frame[t][v], M, (W, H), flags=interp,
-                                                borderMode=cv2.BORDER_REPLICATE)))
-        x = torch.stack(ims).to(device)
         view = torch.tensor([v for _, v in chunk], device=device)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            hm, dp = model(x, view)
+        hm, dp = _forward_tta(model, [panels_per_frame[t][v] for t, v in chunk], [mats[t][v] for t, v in chunk],
+                              view, W, H, hw, hh, copies, device)
         p, c, d = decode(hm.float(), dp.float())
         # Statistics are not differentiable solver inputs; compute on CPU to avoid
         # allocating peak-distance/mask tensors alongside GPU features and render jobs.
@@ -114,9 +167,11 @@ def _read_pass(model, st, panels_per_frame, mats, device, batch, return_quality=
     return (uv, conf, dep, quality) if return_quality else (uv, conf, dep)
 
 
-def run_reader(model, st, panels_per_frame, device="cuda", batch=8, two_pass=True, margin=1.35, return_quality=False):
+def run_reader(model, st, panels_per_frame, device="cuda", batch=8, two_pass=True, margin=1.35, return_quality=False,
+               tta=1):
     """panels_per_frame: list over T of list over V of BGR panel images (studio size).
     Pass 1 reads the whole panel; pass 2 reads a creature-centred crop (temporally smoothed box).
+    tta: read copies averaged in the final pass (1 = a single read, the original behaviour).
     Returns uv (T,V,K,2) in panel px, conf (T,V,K), depth (T,V,K)."""
     from v2r.data import crop_matrix, box_from_points
     W, H = st["net_wh"]
@@ -125,7 +180,7 @@ def run_reader(model, st, panels_per_frame, device="cuda", batch=8, two_pass=Tru
     ph, pw = panels_per_frame[0][0].shape[:2]
     full = np.float32([[W / pw, 0, 0], [0, H / ph, 0]])
     first = _read_pass(model, st, panels_per_frame, [[full] * V for _ in range(T)], device, batch,
-                       return_quality=return_quality and not two_pass)
+                       return_quality=return_quality and not two_pass, tta=1 if two_pass else tta)
     uv, conf, dep = first[:3]
     if not two_pass:
         return first
@@ -140,7 +195,7 @@ def run_reader(model, st, panels_per_frame, device="cuda", batch=8, two_pass=Tru
     pad = np.pad(boxes, ((k, k), (0, 0), (0, 0)), mode="edge")
     boxes = np.median(np.stack([pad[i:i + T] for i in range(2 * k + 1)]), 0)
     mats = [[crop_matrix(*boxes[t, v], W, H) for v in range(V)] for t in range(T)]
-    return _read_pass(model, st, panels_per_frame, mats, device, batch, return_quality=return_quality)
+    return _read_pass(model, st, panels_per_frame, mats, device, batch, return_quality=return_quality, tta=tta)
 
 
 def write_video(path, frames, fps):

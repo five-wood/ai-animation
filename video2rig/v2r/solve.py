@@ -192,8 +192,20 @@ def init_global(sk, X, w):
     return Rg, tr
 
 
+def view_axis_weights(studio, front_vertical=1.0, device="cpu"):
+    """(V,2) weight of the image x / y error per view.  front_vertical < 1 trusts the front view's
+    vertical image axis less: a limb swinging toward the front camera is foreshortened there, while the
+    side view sees the same height without foreshortening.  1.0 = all axes equal (original behaviour)."""
+    w = torch.ones(len(studio["cams"]), 2, device=device)
+    if front_vertical != 1.0:
+        for v, c in enumerate(studio["cams"]):
+            if "front" in str(c.get("name", "")).lower():
+                w[v, 1] = float(front_vertical)
+    return w
+
+
 def fit(rig, studio, uv, conf, X3, depth=None, iters=1500, device="cuda", w_smooth=1.0, w_depth=0.05,
-        verbose=True, fps=None):
+        verbose=True, fps=None, front_vertical=1.0):
     # None preserves the original legacy behaviour. Experimental warm starts supply
     # fps to express acceleration penalties in the same 30Hz-reference units.
     temporal_scale = (float(fps) / 30.) ** 4 if fps is not None else 1.0
@@ -221,6 +233,7 @@ def fit(rig, studio, uv, conf, X3, depth=None, iters=1500, device="cuda", w_smoo
     size_px = float(np.median(np.ptp(uv.reshape(-1, uv.shape[2], 2), axis=1).max(-1)))
     t_dep = tdev(depth) if depth is not None else None
     c = sk.t_center
+    axis_w = view_axis_weights(studio, front_vertical, device)
 
     def forward():
         Rg = rot6d_to_mat(r6)
@@ -231,7 +244,7 @@ def fit(rig, studio, uv, conf, X3, depth=None, iters=1500, device="cuda", w_smoo
 
     def losses(kp, eul, stage):
         puv, pz = cams.project_t(kp)  # (T,V,K,2), (T,V,K)
-        e = (puv - t_uv).norm(dim=-1) / size_px
+        e = ((puv - t_uv).square() * axis_w[None, :, None, :]).sum(-1).sqrt() / size_px
         l_rep = (t_conf * (e ** 2 / (e ** 2 + 0.03 ** 2)) * 0.03 ** 2 * 1e3).mean()  # Geman-McClure
         l_3d = (t_w3 * ((kp - t_X3).norm(dim=-1) / size).clamp(max=0.2) ** 2).mean() * 10
         l = l_rep + (l_3d if stage < 2 else 0.2 * l_3d)

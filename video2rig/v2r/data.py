@@ -147,8 +147,47 @@ def clean_background(h, w, rng):
     return np.repeat(gray[..., None], 3, axis=2).astype(np.float32)
 
 
-def compose(rgba, rng, train=True, profile="legacy"):
-    """Composite BGRA input; legacy keeps the historical augmentation path."""
+def smear_segment(img, uv, a, b, rng, length=None):
+    """Smear the limb piece between keypoints a and b across itself, like a generated fast strike:
+    copies of a band around the segment, shifted along a random direction and blended with falling
+    opacity, so the limb turns into a see-through streak.  The labels do not move (the joint stays where
+    the limb really is, the middle of the streak)."""
+    h, w = img.shape[:2]
+    pa, pb = uv[a], uv[b]
+    seg = pb - pa
+    L = float(np.linalg.norm(seg))
+    if L < 4 or not (0 <= pa[0] < w and 0 <= pa[1] < h and 0 <= pb[0] < w and 0 <= pb[1] < h):
+        return img
+    # the limb piece: a band along the segment (a limb is roughly a third as thick as it is long)
+    mask = np.zeros((h, w), np.float32)
+    thick = int(max(6, 0.4 * L))
+    cv2.line(mask, tuple(int(x) for x in pa), tuple(int(x) for x in pb), 1.0, thick)
+    mask = cv2.GaussianBlur(mask, (0, 0), max(1.0, 0.1 * thick))
+    # the sweep: mostly across the limb (a swinging arm moves sideways to itself)
+    across = np.array([-seg[1], seg[0]]) / L
+    ang = rng.gauss(0, 0.5)
+    d = across * np.cos(ang) + (seg / L) * np.sin(ang)
+    reach = length if length is not None else rng.uniform(0.8, 2.0) * max(L, 25.0)
+    # a straight line kernel along the sweep, centred: averaging along it spreads the limb's colour over
+    # the swept area and thins the limb itself out, the way a frame's exposure records a fast limb
+    k = int(max(5, round(reach))) | 1
+    ker = np.zeros((k, k), np.float32)
+    c = k // 2
+    cv2.line(ker, (int(round(c - d[0] * c)), int(round(c - d[1] * c))),
+             (int(round(c + d[0] * c)), int(round(c + d[1] * c))), 1.0, 1)
+    ker /= max(float(ker.sum()), 1e-6)
+    src = img.astype(np.float32)
+    blurred = cv2.filter2D(src, -1, ker, borderType=cv2.BORDER_REFLECT)
+    swept = cv2.filter2D(mask, -1, ker, borderType=cv2.BORDER_CONSTANT)
+    swept = np.clip(swept / max(float(swept.max()), 1e-6) * 1.6, 0, 1) * rng.uniform(0.75, 1.0)
+    out = src * (1 - swept[..., None]) + blurred * swept[..., None]
+    return np.clip(out, 0, 255).astype(img.dtype)
+
+
+def compose(rgba, rng, train=True, profile="legacy", smear=None):
+    """Composite BGRA input; legacy keeps the historical augmentation path.
+    smear: optional (uv (K,2) panel px, [(a, b), ...] limb segments, probability) — one or two fast limb
+    pieces are smeared into a see-through streak before the global degradations (off by default)."""
     if profile not in ("legacy", "soft-clean"):
         raise ValueError(f"Unknown visual profile: {profile!r}")
     rgb = rgba[..., :3].astype(np.float32)
@@ -170,6 +209,11 @@ def compose(rgba, rng, train=True, profile="legacy"):
     img = rgb * alpha[..., None] + bg * (1 - alpha[..., None])
     if rng.random() < 0.3:
         img = add_dust(img, alpha, rng)
+    if smear is not None and smear[1] and rng.random() < smear[2]:
+        uv_s, segs = smear[0], smear[1]
+        for _ in range(1 if rng.random() < 0.6 else 2):
+            a, b = segs[int(rng.random() * len(segs))]
+            img = smear_segment(img, uv_s, a, b, rng)
     return degrade(img, rng)
 
 
@@ -211,7 +255,8 @@ def load_meta(gen_dir):
 class PoseViews(Dataset):
     """One item = one camera view of one random pose."""
 
-    def __init__(self, project, split="train", val_frac=0.05, target_w=448, hm_stride=3.5, seed=0):
+    def __init__(self, project, split="train", val_frac=0.05, target_w=448, hm_stride=3.5, seed=0,
+                 smear_frac=0.0):
         self.dir = os.path.join(project, "train_data")
         self.rig = json.load(open(os.path.join(project, "rig.json")))
         self.studio = json.load(open(os.path.join(project, "studio.json")))
@@ -237,6 +282,11 @@ class PoseViews(Dataset):
         self.seed = seed
         self.epoch = 0
         self.full_frac = 0.25
+        # limb segments for the smear augmentation: drawing edges whose two ends are on the same L/R side
+        self.smear_frac = float(smear_frac)
+        kps = self.rig["keypoints"]
+        self.limb_segments = [(a, b) for a, b in self.rig.get("edges", [])
+                              if kps[a]["side"] in ("L", "R") and kps[a]["side"] == kps[b]["side"]]
 
     def __len__(self):
         return len(self.items)
@@ -255,7 +305,8 @@ class PoseViews(Dataset):
             M = random_affine(self.pw, self.ph, rng)
             rgba = cv2.warpAffine(rgba, M, (self.pw, self.ph), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
             uv = uv @ M[:, :2].T + M[:, 2]
-        img = compose(rgba, rng, self.train, profile=self.visual_profile)
+        smear = (uv, self.limb_segments, self.smear_frac) if (self.train and self.smear_frac > 0) else None
+        img = compose(rgba, rng, self.train, profile=self.visual_profile, smear=smear)
         full = (rng.random() < self.full_frac) if self.train else (i % 4 == 0)
         if full:
             M = np.float32([[self.W / self.pw, 0, 0], [0, self.H / self.ph, 0]])

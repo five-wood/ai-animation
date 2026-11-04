@@ -189,6 +189,10 @@ class Skeleton:
         self.kp_tail = np.array([k["type"] == "tail" for k in kps])
         self.kp_tail_len = np.array([(k.get("tail_len", bones[k["bone"]]["length"]) if k["type"] == "tail" else 0.0)
                                      for k in kps], float)
+        # every keypoint as a point in its bone's local (armature-space bone) frame: head = 0, tail = (0, L, 0),
+        # "offaxis" = the stored local offset (a point on the skin off the bone's line, riding rigidly on it)
+        self.kp_local = np.array([k["local"] if k["type"] == "offaxis" else [0.0, self.kp_tail_len[n], 0.0]
+                                  for n, k in enumerate(kps)], float)
         self.center = np.array(rig["center"], float)
         self.size = float(rig["size"])
         self.rest_kp = np.array([k["rest_world"] for k in kps], float)
@@ -200,6 +204,7 @@ class Skeleton:
         self.t_kp_bone = torch.tensor(self.kp_bone, device=device)
         self.t_kp_tail = torch.tensor(self.kp_tail, device=device)
         self.t_kp_tail_len = t(self.kp_tail_len)
+        self.t_kp_local = t(self.kp_local)
         self.device, self.dtype = device, dtype
 
     def fk(self, G, eul_active):
@@ -227,9 +232,8 @@ class Skeleton:
         A = torch.stack(A, 1)
         world = torch.einsum("ij,tbjk->tbik", self.t_W, A)
         Wk = world[:, self.t_kp_bone]  # (T,K,4,4)
-        tail_local = torch.zeros(self.K, 4, dtype=self.dtype, device=self.device)
-        tail_local[:, 1] = self.t_kp_tail_len
-        tail_local[:, 3] = 1
+        tail_local = torch.ones(self.K, 4, dtype=self.dtype, device=self.device)
+        tail_local[:, :3] = self.t_kp_local
         kp = torch.einsum("tkij,kj->tki", Wk, tail_local)[..., :3]
         return world, kp
 

@@ -356,6 +356,47 @@ def weighted_groups(meshes, thr=0.02):
     return names
 
 
+def rigid_accessories(meshes, brec, min_verts=50, max_blend=0.02, min_share=0.05):
+    """Active bones whose skin is (almost) not blended with any other active carrier.
+
+    Every vertex weight is assigned to its carrier: the nearest active bone at or above the
+    weighted bone.  A real joint has a band of vertices shared between its carrier and a
+    neighbour; a rigid attachment has none.  Returns [(bone index, blend fraction, verts)]."""
+    active = {i for i, b in enumerate(brec) if b["active"]}
+    by_name = {b["name"]: i for i, b in enumerate(brec)}
+
+    def carrier(i):
+        while i >= 0 and i not in active:
+            i = brec[i]["parent"]
+        return i
+
+    stats = {i: [0, 0] for i in active}
+    for m in meshes:
+        gname = {g.index: g.name for g in m.vertex_groups}
+        for v in m.data.vertices:
+            ws = {}
+            for g in v.groups:
+                bi = by_name.get(gname.get(g.group))
+                if bi is None or g.weight <= 1e-3:
+                    continue
+                c = carrier(bi)
+                if c >= 0:
+                    ws[c] = ws.get(c, 0.0) + g.weight
+            tot = sum(ws.values())
+            if tot <= 0:
+                continue
+            share = {c: w / tot for c, w in ws.items() if w / tot >= min_share}
+            for c in share:
+                if c in stats:
+                    stats[c][0] += 1
+                    stats[c][1] += len(share) > 1
+    out = []
+    for i, (n, nb) in stats.items():
+        if brec[i]["parent"] >= 0 and n >= min_verts and nb / n < max_blend:
+            out.append((i, nb / n, n))
+    return out
+
+
 def default_limits(side, is_root):
     if is_root:
         return [[-180, 180], [-180, 180], [-180, 180]]
@@ -711,10 +752,125 @@ def anatomical_limits(brec, kps, W, size, center, fwd, lateral, up=(0.0, 0.0, 1.
     return result
 
 
+def _skin_of_subtree(meshes, bones, root_idx, index, min_w=0.5):
+    """World positions of vertices whose strongest weight belongs to bone root_idx or a descendant."""
+    names = set()
+    stack = [bones[root_idx]]
+    while stack:
+        b = stack.pop()
+        names.add(b.name)
+        stack += list(b.children)
+    pts = []
+    dg = bpy.context.evaluated_depsgraph_get()
+    for m in meshes:
+        gname = {g.index: g.name for g in m.vertex_groups}
+        M = mat_np(m.matrix_world)
+        ev = m.evaluated_get(dg)
+        me = ev.to_mesh()
+        for v_src, v_ev in zip(m.data.vertices, me.vertices):
+            if not v_src.groups:
+                continue
+            g = max(v_src.groups, key=lambda g: g.weight)
+            if g.weight >= min_w and gname.get(g.group) in names:
+                pts.append(M[:3, :3] @ np.array(v_ev.co) + M[:3, 3])
+        ev.to_mesh_clear()
+    return np.array(pts) if pts else np.zeros((0, 3))
+
+
+def _extra_keypoints(kps, bones, index, meshes, W, size, center, lateral, fwd, fist_points=False,
+                     offaxis_points=False, spread_min=0.35, max_side_frac=0.25):
+    """fist_points: a hand whose finger keypoints all lie close to it (a fist, a paw) keeps only its own
+    head keypoint plus one knuckle point: the finger points on a closed fist look alike and are read
+    interchangeably.  offaxis_points: on the hand-like ends of the limbs and on the head, add two skin
+    points off the bone's line where the skin spreads widest, so the bone's turn about its own axis is
+    visible; each is stored as an offset in the bone's local frame (type "offaxis")."""
+    Winv = np.linalg.inv(W)
+    by_bone = {}
+    for n, k in enumerate(kps):
+        by_bone.setdefault(k["bone"], []).append(n)
+    parent = {i: (index[b.parent.name] if b.parent else -1) for i, b in enumerate(bones)}
+
+    def ancestors(i):
+        out = []
+        p = parent[i]
+        while p >= 0:
+            out.append(p)
+            p = parent[p]
+        return out
+
+    hand_re = re.compile(r"(?i)(hand|wrist|paw|fist)")
+    head_re = re.compile(r"(?i)(^|[^a-z])head($|[^a-z])")
+    hands = [i for i, b in enumerate(bones) if hand_re.search(b.name) and i in by_bone
+             and any(kps[n]["type"] == "head" for n in by_bone[i])]
+    # keep only the topmost hand bone of a chain (Bip001 L Hand, not Bip001_L_Hand_Bone below it)
+    hands = [i for i in hands if not any(a in hands for a in ancestors(i))]
+    drop = set()
+    new = []
+    if fist_points:
+        for h in hands:
+            hp = np.array(bones[h].head_local)
+            desc = [n for n, k in enumerate(kps) if k["bone"] != h and h in ancestors(k["bone"])]
+            if len(desc) < 2:
+                continue
+            P = np.array([kps[n]["rest_world"] for n in desc])
+            hw = W[:3, :3] @ hp + W[:3, 3]
+            reach = float(np.max(np.linalg.norm(P - hw, axis=1)))
+            if reach > max_side_frac * size:
+                continue  # long open fingers: keep them
+            # one knuckle point: the descendant keypoint farthest from the wrist
+            far = desc[int(np.argmax(np.linalg.norm(P - hw, axis=1)))]
+            for n in desc:
+                if n != far:
+                    drop.add(n)
+            print(f"[v2r] fist: {bones[h].name} keeps its head + {kps[far]['name']}, drops {len(desc) - 1} finger points")
+    if offaxis_points:
+        heads = [i for i, b in enumerate(bones) if head_re.search(b.name) and i in by_bone]
+        heads = [i for i in heads if not any(a in heads for a in ancestors(i))]
+        for i in hands + heads:
+            b = bones[i]
+            X = _skin_of_subtree(meshes, bones, i, index)
+            if len(X) < 30:
+                continue
+            Mb = W @ mat_np(b.matrix_local)  # bone frame in world
+            R, o = Mb[:3, :3] / np.linalg.norm(Mb[:3, 0]), Mb[:3, 3]
+            u = R[:, 1]  # Blender bone +Y; for a 3ds Max rig the limb axis may differ, so measure the spread
+            # on the plane across the bone's real limb direction: from its head toward the skin's centroid
+            d = X.mean(0) - o
+            if np.linalg.norm(d) > 1e-6 * size:
+                u = d / np.linalg.norm(d)
+            perp = (X - o) - np.outer((X - o) @ u, u)
+            w_, E = np.linalg.eigh(np.cov(perp.T))
+            e = E[:, -1]
+            e = e - (e @ u) * u
+            if np.linalg.norm(e) < 1e-9:
+                continue
+            e /= np.linalg.norm(e)
+            s = perp @ e
+            span = float(np.percentile(s, 99) - np.percentile(s, 1))
+            along = float(np.percentile(np.abs((X - o) @ u), 95))
+            if span < spread_min * max(along, 0.02 * size):
+                continue
+            # a consistent sign: outward / forward / up, whichever the spread direction is closest to
+            out_dir = lateral * (1.0 if float((o - np.array(center)) @ lateral) >= 0 else -1.0)
+            ref = max((out_dir, fwd, np.array([0.0, 0.0, 1.0])), key=lambda r: abs(float(r @ e)))
+            if float(ref @ e) < 0:
+                e, s = -e, -s
+            for tag, val in (("a", np.percentile(s, 99)), ("b", np.percentile(s, 1))):
+                v = X[int(np.argmin(np.abs(s - val)))]
+                loc = np.linalg.inv(mat_np(b.matrix_local)) @ np.append(Winv[:3, :3] @ v + Winv[:3, 3], 1.0)
+                new.append({"name": f"{b.name}.side_{tag}", "bone": i, "type": "offaxis",
+                            "local": [float(x) for x in loc[:3]], "rest_world": [float(x) for x in v],
+                            "tail_len": 0.0})
+            print(f"[v2r] off-axis points on {b.name}: skin spread {span / size:.3f} of size across its axis")
+    return [k for n, k in enumerate(kps) if n not in drop] + new
+
+
 def extract_rig(arm, meshes, facing="-Y", exclude=DEFAULT_EXCLUDE, merge_frac=0.015,
-                limits_override=None, min_seg_frac=0.06, keep_bones=None, limits_mode="anatomical"):
+                limits_override=None, min_seg_frac=0.06, keep_bones=None, limits_mode="anatomical",
+                fist_points=False, offaxis_points=False):
     """limits_mode: "anatomical" = per joint type ranges (anatomical_limits), "generic" = the
-    old fixed +-75/30/50 (limbs) and +-35/20/30 (midline) Euler boxes.  --limits overrides both."""
+    old fixed +-75/30/50 (limbs) and +-35/20/30 (midline) Euler boxes.  --limits overrides both.
+    fist_points / offaxis_points: see _extra_keypoints (off by default: the rig is unchanged)."""
     if limits_mode not in ("anatomical", "generic"):
         raise ValueError(f"unknown limits_mode {limits_mode!r}")
     W = mat_np(arm.matrix_world)
@@ -792,6 +948,9 @@ def extract_rig(arm, meshes, facing="-Y", exclude=DEFAULT_EXCLUDE, merge_frac=0.
         k["rest_world"] = (h + (t - h) * frac).tolist()
         if frac < 1.0:
             print(f"[v2r] tip of {b.name} clipped to {frac:.2f} of the bone (it stuck out of the mesh)")
+    if fist_points or offaxis_points:
+        kps = _extra_keypoints(kps, bones, index, meshes, W, size, center, lateral, fwd,
+                               fist_points=fist_points, offaxis_points=offaxis_points)
     # side / mirror
     c = np.array(center)
     for k in kps:
@@ -847,7 +1006,7 @@ def extract_rig(arm, meshes, facing="-Y", exclude=DEFAULT_EXCLUDE, merge_frac=0.
     moved = [set() for _ in brec]
     for ki, k in enumerate(kps):
         bi = k["bone"]
-        movers = list(anc[bi]) + ([bi] if k["type"] == "tail" else [])
+        movers = list(anc[bi]) + ([bi] if k["type"] in ("tail", "offaxis") else [])
         for m in movers:
             if np.linalg.norm(np.array(k["rest_world"]) - np.array(brec[m]["head_world"])) > 1e-3 * size:
                 moved[m].add(ki)
@@ -881,6 +1040,17 @@ def extract_rig(arm, meshes, facing="-Y", exclude=DEFAULT_EXCLUDE, merge_frac=0.
             b["folded"] = True
             b["helper_of"] = brec[p]["name"]
             print(f"[v2r] helper bone {b['name']} shares its pivot with {brec[p]['name']}: rides with it")
+    # rigid accessories (goggles, helmets, armour plates): the skin a bone carries is not blended
+    # with any other bone, so it is a rigid attachment, not a joint.  Its few keypoints sit close
+    # to its pivot, so reader noise turns into large spurious rotations; let it ride with its parent
+    # and let its keypoints inform the parent instead.  --keep-bones keeps it free.
+    for m, frac, n in rigid_accessories(meshes, brec):
+        if m in force_active:
+            continue
+        brec[m]["active"] = False
+        brec[m]["folded"] = True
+        brec[m]["rigid_accessory"] = True
+        print(f"[v2r] rigid accessory {brec[m]['name']}: {n} skinned verts, {frac:.1%} blended with other bones: rides with its parent")
     if limits_mode == "anatomical":
         for bi, (jt, lim, note) in anatomical_limits(brec, kps, W, size, center, fwd, lateral).items():
             brec[bi]["joint"] = jt
@@ -892,7 +1062,7 @@ def extract_rig(arm, meshes, facing="-Y", exclude=DEFAULT_EXCLUDE, merge_frac=0.
     kp_of_bone_head = {k["bone"]: i for i, k in enumerate(kps) if k["type"] == "head"}
     edges = []
     for i, k in enumerate(kps):
-        cand = ([k["bone"]] if k["type"] == "tail" else []) + anc[k["bone"]]
+        cand = ([k["bone"]] if k["type"] in ("tail", "offaxis") else []) + anc[k["bone"]]
         for a in cand:
             if a in kp_of_bone_head and kp_of_bone_head[a] != i:
                 edges.append([kp_of_bone_head[a], i])
@@ -956,6 +1126,8 @@ def keypoints_world(arm, rig):
         pb = arm.pose.bones[b["name"]]
         if k["type"] == "head":
             p = pb.head
+        elif k["type"] == "offaxis":
+            p = pb.matrix @ Vector(k["local"])  # bone-local offset riding rigidly on the posed bone
         else:
             frac = k.get("tail_len", b["length"]) / max(b["length"], 1e-12)
             p = pb.head + (pb.tail - pb.head) * frac

@@ -171,7 +171,7 @@ def _edge_evidence(rig, uv, valid, pixel_floor):
                 bone_z=point_z, bone_scale_px=point_scale, bone_factor=point_factor)
 
 
-def observation_weights(rig, studio, uv, conf, res, fps, heat_quality=None):
+def observation_weights(rig, studio, uv, conf, res, fps, heat_quality=None, corroborate=False):
     """Return ``(weights, diagnostics)`` without changing any input.
 
     Parameters
@@ -198,6 +198,10 @@ def observation_weights(rig, studio, uv, conf, res, fps, heat_quality=None):
     Ray evidence is shared symmetrically across views and bounded [0.8,1]:
     with two views it cannot identify a wrong view, and must not erase both.
     Image bounds are geometric checks only, never visibility estimation.
+
+    corroborate=True: a temporal outlier whose two camera rays still meet is treated as real
+    motion (an abrupt stop / strike), not a reader failure, so its temporal penalty is relaxed
+    in proportion to the ray agreement.  Off by default (legacy weights unchanged).
     """
     if isinstance(fps, (bool, np.bool_)) or np.ndim(fps) != 0:
         raise ValueError("fps must be a positive finite scalar")
@@ -260,6 +264,13 @@ def observation_weights(rig, studio, uv, conf, res, fps, heat_quality=None):
         ray_factor.fill(1.0)
     d.update(ray_residual_px=ray, ray_residual_finite=ray_valid,
              ray_shared_px=shared_ray, ray_scale_px=np.asarray(ray_scale), ray_factor=ray_factor)
+    if corroborate and V > 1:
+        agree = 1.0 / (1.0 + (shared_ray / ray_scale) ** 2)  # (T,K), 1 = rays meet
+        agree = np.where(ray_valid.all(axis=1), agree, 0.0)
+        tf = d["temporal_factor"]
+        d["temporal_factor_uncorroborated"] = tf.copy()
+        d["temporal_corroboration"] = np.broadcast_to(agree[:, None], (T, V, K)).copy()
+        d["temporal_factor"] = tf + (1.0 - tf) * agree[:, None]
     heat_quality = {} if heat_quality is None else heat_quality
     if not isinstance(heat_quality, dict):
         raise ValueError("heat_quality must be a dict or None")

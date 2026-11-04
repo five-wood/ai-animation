@@ -91,6 +91,138 @@ def pose_to_arrays(eul, g):
     return q, global_matrix(*g)
 
 
+# ------------------------------------------------------------------ contact poses (reach)
+# Joint angles drawn independently almost never put two hands together or a hand on the body, yet those
+# are exactly the poses in which a hand is hard to see (a fist on the chest, both hands on one weapon).
+# reach_pose() bends a free limb chain with its own joints, inside their limits, so its end lands on a
+# chosen target.  Pure numerical IK on the rig's own FK (no Blender evaluation), so it is cheap.
+def _limb_chains():
+    """Free limb chains (shoulder side first) whose end carries a keypoint: only L/R chains."""
+    kids = {i: [j for j, b in enumerate(rig["bones"]) if b["parent"] == i] for i in range(B)}
+    act = set(active)
+    chains = []
+    for i in active:
+        b = rig["bones"][i]
+        if b.get("side") not in ("L", "R") or b.get("joint") not in ("clavicle", "shoulder"):
+            continue
+        p = b["parent"]
+        while p >= 0 and p not in act:
+            p = rig["bones"][p]["parent"]
+        if p >= 0 and rig["bones"][p].get("side") in ("L", "R"):
+            continue  # not the root of its chain
+        chain, cur = [i], i
+        while True:
+            nxt = [j for j in kids[cur] if j in act] or \
+                  [k for j in kids[cur] for k in kids[j] if k in act]
+            if not nxt:
+                break
+            cur = nxt[0]
+            chain.append(cur)
+        if len(chain) >= 2:
+            chains.append((b["side"], chain))
+    return chains
+
+
+_REST_W = None
+
+
+def _fk_end(eul, g, chain):
+    """World position of the end of `chain` (tail of its last bone) for the pose (eul, g)."""
+    global _REST_W
+    if _REST_W is None:
+        _REST_W = np.array(rig["world_matrix"])
+    W = _REST_W
+    G = global_matrix(*g)
+    rest = [np.array(b["rest"]) for b in rig["bones"]]
+    # forward kinematics along the full ancestry of the end bone
+    end = chain[-1]
+    path = []
+    j = end
+    while j >= 0:
+        path.append(j)
+        j = rig["bones"][j]["parent"]
+    path = path[::-1]
+    A = np.linalg.inv(W) @ G @ W
+    prev = None
+    for j in path:
+        off = rest[j] if prev is None else np.linalg.inv(rest[prev]) @ rest[j]
+        R = np.eye(4)
+        R[:3, :3] = np.array(Euler([math.radians(a) for a in eul[j]], "XYZ").to_matrix())
+        A = A @ off @ R
+        prev = j
+    tip = A @ np.array([0.0, rig["bones"][end]["length"], 0.0, 1.0])
+    return (W @ tip)[:3]
+
+
+def reach_pose(eul, g, chain, target, iters=40):
+    """Bend `chain` (inside its limits) so its end moves toward `target` (world).  Coordinate descent on
+    the chain's Euler channels with a step that shrinks; stays close to the drawn pose otherwise."""
+    eul = eul.copy()
+    step = 12.0
+    best = np.linalg.norm(_fk_end(eul, g, chain) - target)
+    for _ in range(iters):
+        improved = False
+        for j in chain:
+            lim = rig["bones"][j]["limits"]
+            for a in range(3):
+                for sgn in (1, -1):
+                    old = eul[j, a]
+                    eul[j, a] = float(np.clip(old + sgn * step, lim[a][0], lim[a][1]))
+                    d = np.linalg.norm(_fk_end(eul, g, chain) - target)
+                    if d < best - 1e-6:
+                        best, improved = d, True
+                    else:
+                        eul[j, a] = old
+        if not improved:
+            step *= 0.5
+            if step < 0.5:
+                break
+    return eul, best
+
+
+def contact_variant(eul, g, rng, together=0.18, onto_body=0.17):
+    """With probability `together` bring the ends of the two free arms together in front of the body,
+    with `onto_body` lay one arm's end on the body's own surface (a random skin point not on that arm).
+    Returns (eul, kind)."""
+    chains = _limb_chains()
+    if not chains:
+        return eul, None
+    u = rng.random()
+    fwd = np.array(rig["forward"]) if "forward" in rig else np.array([0.0, -1.0, 0.0])
+    up = np.array([0.0, 0.0, 1.0])
+    if u < together:
+        left = [c for s, c in chains if s == "L"]
+        right = [c for s, c in chains if s == "R"]
+        if not left or not right:
+            return eul, None
+        a, b = left[0], right[0]
+        ea, eb = _fk_end(eul, g, a), _fk_end(eul, g, b)
+        reach = 0.5 * np.linalg.norm(ea - eb)
+        mid = 0.5 * (ea + eb)
+        d = fwd + 0.3 * up * rng.uniform(-1, 1)  # mostly in front of the body, a little up or down
+        target = mid + d / max(np.linalg.norm(d), 1e-9) * reach * rng.uniform(0.2, 0.6)
+        off = np.array([rng.gauss(0, 1) for _ in range(3)])
+        off *= 0.04 * size / max(np.linalg.norm(off), 1e-9)
+        eul, _ = reach_pose(eul, g, a, target + off)
+        eul, _ = reach_pose(eul, g, b, target - off)
+        return eul, "together"
+    if u < together + onto_body:
+        side, chain = chains[int(rng.random() * len(chains))]
+        q, G = pose_to_arrays(eul, g)
+        apply_pose(arm, rig, G, q)  # the skin in the drawn pose, to pick a target on its surface
+        bpy.context.view_layer.update()
+        bvh_, verts = bvh_from_meshes(meshes)
+        tips = np.array([_fk_end(eul, g, c) for _, c in chains])
+        far = np.linalg.norm(verts[:, None, :] - tips[None], axis=-1).min(1) > 0.12 * size
+        cand = np.nonzero(far)[0]
+        if not len(cand):
+            return eul, None
+        target = verts[int(cand[int(rng.random() * len(cand))])]
+        eul, _ = reach_pose(eul, g, chain, target)
+        return eul, "onto_body"
+    return eul, None
+
+
 # ------------------------------------------------------------------ smooth made-up motion (the exam)
 def smooth_noise(rng, T, n_comp=3, fmin=0.2, fmax=1.6, fps=30.0):
     t = np.arange(T) / fps
@@ -117,6 +249,58 @@ def make_motion(rng, T):
     g[:, 4] = 0.1 * size * smooth_noise(rng, T, fmax=0.4)
     g[:, 5] = 0.06 * size * np.abs(smooth_noise(rng, T, fmax=1.2))
     return eul, g
+
+
+def make_strike_motion(rng, T, fps=30.0):
+    """Exam motion with impacts: hold -> fast accelerating move -> abrupt stop -> hold ...
+    Every move ends at full speed and stops within one frame (an ease-in curve without
+    ease-out), like a punch or a strike.  All active joints share the key times; each joint
+    gets a new random target inside its limits at every key.  Returns eul, g, impacts
+    (list of {"start", "end"} frame indices of each move; the impact is at "end")."""
+    keys, t = [0], int(0.4 * fps)          # Seedance-like still start
+    keys.append(t)
+    while True:
+        move = rng.choice([2, 3, 4])
+        hold = rng.randint(int(0.25 * fps), int(0.55 * fps))
+        if t + move + hold >= T - 1:
+            break
+        keys += [t + move, t + move + hold]
+        t += move + hold
+    targets = {}
+    for i in active:
+        lim = rig["bones"][i]["limits"]
+        pose = np.zeros(3)
+        seq = [pose]
+        for _ in range(len(keys) // 2):
+            nxt = np.array([0.5 * (lo + hi) + 0.75 * 0.5 * (hi - lo) * rng.uniform(-1, 1) for lo, hi in lim])
+            seq.append(nxt)
+        targets[i] = seq
+    eul = np.zeros((T, B, 3))
+    impacts = []
+    for n in range(1, len(keys) - 1, 2):
+        s, e = keys[n], keys[n + 1]
+        impacts.append({"start": int(s), "end": int(e)})
+    seg = 0
+    for f in range(T):
+        # which move are we in / after
+        while seg < len(impacts) and f >= impacts[seg]["end"]:
+            seg += 1
+        for i in active:
+            seq = targets[i]
+            if seg < len(impacts) and f >= impacts[seg]["start"]:
+                s, e = impacts[seg]["start"], impacts[seg]["end"]
+                u = (f - s) / (e - s)
+                w = u * u  # ease-in only: full speed at the end, then stop
+                eul[f, i] = seq[seg] + (seq[seg + 1] - seq[seg]) * w
+            else:
+                eul[f, i] = seq[seg]
+    g = np.zeros((T, 6))
+    g[:, 0] = 20 * smooth_noise(rng, T, fmax=0.3)
+    g[:, 1] = 5 * smooth_noise(rng, T, fmax=0.4)
+    g[:, 2] = 4 * smooth_noise(rng, T, fmax=0.4)
+    g[:, 3] = 0.06 * size * smooth_noise(rng, T, fmax=0.3)
+    g[:, 4] = 0.06 * size * smooth_noise(rng, T, fmax=0.3)
+    return eul, g, impacts
 
 
 # ------------------------------------------------------------------ labels
@@ -166,6 +350,9 @@ if mode == "random":
         if j % 4 == 0:
             setup_lights(studio, rng)
         eul, g = sample_pose(rng)
+        contact = None
+        if opt.get("contact_poses"):
+            eul, contact = contact_variant(eul, g, rng)
         fast = rng.random() < fast_frac
         if fast:
             s = rng.uniform(0.3, 1.0)
@@ -185,6 +372,8 @@ if mode == "random":
         kp, lab = labels_for_current_pose()
         q, G = pose_to_arrays(eul, g)
         rec = {"id": idx, "fast": fast, "kp3d": kp.tolist(), "G": G.tolist(), "quat": q.tolist()}
+        if contact:
+            rec["contact"] = contact
         for c, co in zip(studio["cams"], cams):
             fn = f"{idx:06d}_{c['name']}.png"
             render_to(os.path.join(outdir, fn), co)
@@ -202,7 +391,11 @@ if mode == "random":
 elif mode == "motion":
     T, seed = opt.get("frames", 120), opt.get("seed", 1)
     rng = random.Random(seed)
-    eul, g = make_motion(rng, T)
+    impacts = []
+    if opt.get("style", "smooth") == "strike":
+        eul, g, impacts = make_strike_motion(rng, T)
+    else:
+        eul, g = make_motion(rng, T)
     setup_lights(studio)
     frames = []
     for t in range(T):
@@ -224,5 +417,6 @@ elif mode == "motion":
         if t % 20 == 0:
             print(f"[v2r] motion frame {t + 1}/{T}", flush=True)
     with open(os.path.join(outdir, "motion_gt.json"), "w") as f:
-        json.dump({"fps": 30, "frames": frames, "euler": eul.tolist(), "global": g.tolist()}, f)
+        json.dump({"fps": 30, "frames": frames, "euler": eul.tolist(), "global": g.tolist(),
+                   "style": opt.get("style", "smooth"), "impacts": impacts}, f)
 print(f"[v2r] gen done in {time.time() - t0:.1f}s")

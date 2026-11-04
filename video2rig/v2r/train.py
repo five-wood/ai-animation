@@ -13,10 +13,15 @@ from v2r.model import JointReader, gaussian_targets, decode
 
 
 def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dinov2.lvd142m", img=448,
-          workers=12, sigma=2.0, device="cuda"):
+          workers=12, sigma=2.0, device="cuda", steps=None, hidden_empty=False, smear_frac=0.0):
+    """steps: total optimiser steps (overrides epochs; the run ends after exactly that many).
+    hidden_empty: keypoints hidden by the body in a view (vis = 0 in the labels) get an EMPTY target
+    heatmap instead of a peak, so the reader learns to report low confidence there rather than a
+    confident guess; depth is still trained at their true place.  smear_frac: share of training pictures
+    with a limb smeared into a see-through streak (data.smear_segment).  Defaults keep the old behaviour."""
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    tr = PoseViews(project, "train", target_w=img)
+    tr = PoseViews(project, "train", target_w=img, smear_frac=smear_frac)
     va = PoseViews(project, "val", target_w=img)
     K = tr.K
     print(f"[v2r] train items={len(tr)} val items={len(va)} K={K} net={tr.W}x{tr.H} heat={tr.hw}x{tr.hh}")
@@ -25,7 +30,11 @@ def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dino
     head_params = [p for n, p in model.named_parameters() if not n.startswith("backbone.")]
     opt = torch.optim.AdamW([{"params": bb_params, "lr": lr * 0.1}, {"params": head_params, "lr": lr}],
                             weight_decay=0.03)
-    steps = epochs * math.ceil(len(tr) / batch)
+    per_epoch = math.ceil(len(tr) / batch)
+    if steps:
+        epochs = math.ceil(int(steps) / max(per_epoch - 1, 1))  # drop_last: per_epoch - 1 full batches at least
+    steps = int(steps) if steps else epochs * per_epoch
+    print(f"[v2r] {steps} optimiser steps ({epochs} epochs max), hidden_empty={hidden_empty}, smear={smear_frac}")
     warm = min(500, steps // 20)
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min(1.0, (s + 1) / warm) * 0.5 * (1 + math.cos(math.pi * min(1.0, s / steps))))
@@ -53,12 +62,14 @@ def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dino
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 hm, dp = model(x, view)
             hm, dp = hm.float(), dp.float()
-            tgt = gaussian_targets(uv_hm, inside, tr.hh, tr.hw, sigma)
-            # focal-style weighted BCE on heatmaps
+            seen = inside * b["vis"].to(device) if hidden_empty else inside
+            tgt = gaussian_targets(uv_hm, seen, tr.hh, tr.hw, sigma)
+            # focal-style weighted BCE on heatmaps (a hidden keypoint's map is all background -> low peak)
             pos_w = 1 + 40 * tgt
             l_hm = (F.binary_cross_entropy_with_logits(hm, tgt, reduction="none") * pos_w).mean()
-            # depth: read at the true joint location
-            g = tgt / tgt.sum((-1, -2), keepdim=True).clamp(min=1e-6)
+            # depth: read at the true joint location (hidden keypoints too: they have a depth all the same)
+            g = gaussian_targets(uv_hm, inside, tr.hh, tr.hw, sigma) if hidden_empty else tgt
+            g = g / g.sum((-1, -2), keepdim=True).clamp(min=1e-6)
             d_pred = (dp * g).sum((-1, -2))
             l_d = (F.smooth_l1_loss(d_pred, depth, reduction="none", beta=0.05) * inside).sum() / inside.sum().clamp(min=1)
             loss = l_hm * 10 + l_d
@@ -73,27 +84,35 @@ def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dino
                 m = np.mean(tl[-50:], 0)
                 print(f"[v2r] ep {ep} step {step}/{steps} hm {m[0]:.4f} depth {m[1]:.4f} "
                       f"{(time.time() - t0) / 60:.1f}min", flush=True)
+            if step >= steps:
+                break
         ev = evaluate(model, va, device, batch)
         rec = {"epoch": ep, "train_hm": float(np.mean(tl, 0)[0]), "train_depth": float(np.mean(tl, 0)[1]), **ev,
                "minutes": (time.time() - t0) / 60}
         log.write(json.dumps(rec) + "\n")
         log.flush()
         print(f"[v2r] == epoch {ep}: val px err median {ev['px_med']:.2f} p90 {ev['px_p90']:.2f} "
-              f"(visible {ev['px_med_vis']:.2f}) depth-order acc {ev['depth_order']:.3f}", flush=True)
+              f"(visible {ev['px_med_vis']:.2f}) depth-order acc {ev['depth_order']:.3f} "
+              f"conf visible {ev['conf_visible'] or 0:.2f} hidden {ev['conf_hidden'] or 0:.2f}", flush=True)
         state = {"model": model.state_dict(), "K": K, "views": tr.views, "backbone": backbone,
-                 "net_wh": [tr.W, tr.H], "heat_wh": [tr.hw, tr.hh], "img": img, "epoch": ep, "val": ev}
+                 "net_wh": [tr.W, tr.H], "heat_wh": [tr.hw, tr.hh], "img": img, "epoch": ep, "val": ev,
+                 "hidden_empty": bool(hidden_empty), "smear_frac": float(smear_frac)}
         torch.save(state, os.path.join(ckpt_dir, "last.pt"))
-        if ev["px_mean"] < best:
-            best = ev["px_mean"]
+        # a reader taught to answer "not here" for hidden keypoints is judged on the visible ones
+        crit = ev["px_mean_vis"] if hidden_empty else ev["px_mean"]
+        if crit < best:
+            best = crit
             torch.save(state, os.path.join(ckpt_dir, "best.pt"))
-    print(f"[v2r] training done in {(time.time() - t0) / 60:.1f} min, best val px mean {best:.2f}")
+        if step >= steps:
+            break
+    print(f"[v2r] training done in {(time.time() - t0) / 60:.1f} min ({step} steps), best val px mean {best:.2f}")
 
 
 @torch.no_grad()
 def evaluate(model, ds, device, batch):
     model.eval()
     dl = DataLoader(ds, batch_size=batch, shuffle=False, num_workers=8)
-    errs, errs_vis, order = [], [], []
+    errs, errs_vis, order, conf_vis, conf_hid = [], [], [], [], []
     sx, sy = ds.W / ds.hw, ds.H / ds.hh
     for b in dl:
         x = b["img"].to(device)
@@ -105,6 +124,8 @@ def evaluate(model, ds, device, batch):
         m = b["inside"] > 0
         errs.append(e[m])
         errs_vis.append(e[m & (b["vis"] > 0)])
+        conf_vis.append(conf.cpu()[m & (b["vis"] > 0)])
+        conf_hid.append(conf.cpu()[m & (b["vis"] <= 0)])
         # pairwise depth ordering among mirror pairs (near vs far leg)
         for i, k in enumerate(ds.rig["keypoints"]):
             j = k["mirror"]
@@ -116,6 +137,8 @@ def evaluate(model, ds, device, batch):
     e = torch.cat(errs).numpy()
     ev = torch.cat(errs_vis).numpy()
     o = torch.cat(order).numpy() if order else np.array([1.0])
+    cv, ch = torch.cat(conf_vis).numpy(), torch.cat(conf_hid).numpy()
     model.train()
     return {"px_mean": float(e.mean()), "px_med": float(np.median(e)), "px_p90": float(np.percentile(e, 90)),
-            "px_med_vis": float(np.median(ev)), "depth_order": float(o.mean())}
+            "px_med_vis": float(np.median(ev)), "px_mean_vis": float(ev.mean()), "depth_order": float(o.mean()),
+            "conf_visible": float(cv.mean()) if cv.size else None, "conf_hidden": float(ch.mean()) if ch.size else None}

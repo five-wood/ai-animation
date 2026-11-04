@@ -140,6 +140,14 @@ If the model has **no skeleton**, rig it first. UniRig is installed in `/root/ri
 1. Send `reference_two_views.png` to Seedance/Kling together with a prompt like
    *"Split screen, two locked-off studio cameras of the same creature: left = front view, right = side view.
    The camera does not move. Grey studio background. The creature <does the move>."*
+
+   Always close the prompt with a "clean picture" clause in your own words, for example:
+   *"Keep the image clean and sharp in every frame: the floor stays empty, nothing is kicked up or
+   thrown off, there are no added effects, glows, streaks or blur, and every limb, hand, foot and held
+   object stays fully visible."*
+   Reason: the reader only ever saw clean renders. Generated dust, sparks, speed streaks or heavy blur
+   over a hand or foot do not lower its confidence; it still reports a joint position there, often a
+   wrong one. Regenerating a clip is cheaper than fixing those frames.
 2. Run:
 
 ```bash
