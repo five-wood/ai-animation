@@ -1,0 +1,15 @@
+[Unit]
+Description=video2rig web dashboard
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/data/video2rig/code
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/data/video2rig/.venv/bin/python -m uvicorn web.server:app --host 0.0.0.0 --port 8600 --workers 1
+Restart=on-failure
+RestartSec=3
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

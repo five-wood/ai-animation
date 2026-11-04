@@ -1,0 +1,13 @@
+{
+ "frames": 121,
+ "fps": 24.0,
+ "check": {
+  "same_move": false,
+  "bad_frames": 46,
+  "median_residual_rel": 0.015812287515587754,
+  "label_swaps_fixed": 3
+ },
+ "reproj_px_median": 4.311079025268555,
+ "reproj_px_p90": 40.30693054199219,
+ "seconds": 35.07081937789917
+}

@@ -1,0 +1,90 @@
+"""DINOv2 joint reader: heatmap per joint + relative depth per joint + view embedding."""
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import timm
+
+
+class Up(nn.Module):
+    def __init__(self, cin, cout):
+        super().__init__()
+        self.conv = nn.Sequential(nn.Conv2d(cin, cout, 3, padding=1), nn.GroupNorm(8, cout), nn.GELU(),
+                                  nn.Conv2d(cout, cout, 3, padding=1), nn.GroupNorm(8, cout), nn.GELU())
+
+    def forward(self, x):
+        return self.conv(F.interpolate(x, scale_factor=2, mode="bilinear", align_corners=False))
+
+
+class JointReader(nn.Module):
+    def __init__(self, n_kp, n_views=2, backbone="vit_base_patch14_dinov2.lvd142m", pretrained=True,
+                 img_size=(504, 448), layers=(-4, -3, -2, -1)):
+        super().__init__()
+        self.backbone = timm.create_model(backbone, pretrained=pretrained, num_classes=0,
+                                          img_size=img_size, dynamic_img_size=True)
+        self.layers = layers
+        d = self.backbone.embed_dim
+        self.view_emb = nn.Embedding(n_views, d)
+        nn.init.zeros_(self.view_emb.weight)
+        self.proj = nn.Sequential(nn.Conv2d(d * len(layers), 256, 1), nn.GroupNorm(8, 256), nn.GELU())
+        self.up1 = Up(256, 192)
+        self.up2 = Up(192, 128)
+        self.hm = nn.Conv2d(128, n_kp, 1)
+        self.dp = nn.Conv2d(128, n_kp, 1)
+        nn.init.constant_(self.hm.bias, -4.0)
+        self.n_kp = n_kp
+        self.patch = 14
+
+    def features(self, x, view):
+        B, _, H, W = x.shape
+        bb = self.backbone
+        t = bb.patch_embed(x)
+        t = bb._pos_embed(t)
+        t = t + self.view_emb(view)[:, None, :]
+        t = bb.norm_pre(t)
+        n_blocks = len(bb.blocks)
+        want = {(l % n_blocks) for l in self.layers}
+        outs = []
+        for i, blk in enumerate(bb.blocks):
+            t = blk(t)
+            if i in want:
+                outs.append(bb.norm(t) if i == n_blocks - 1 else t)
+        npt = bb.num_prefix_tokens
+        h, w = H // self.patch, W // self.patch
+        fs = [o[:, npt:].transpose(1, 2).reshape(B, -1, h, w) for o in outs]
+        return torch.cat(fs, 1)
+
+    def forward(self, x, view):
+        f = self.features(x, view)
+        f = self.up2(self.up1(self.proj(f)))
+        return self.hm(f), self.dp(f)  # (B,K,4h,4w) logits, depth
+
+
+def gaussian_targets(uv_hm, valid, hh, hw, sigma=1.5):
+    """uv_hm (B,K,2) in heatmap pixels -> (B,K,hh,hw) gaussians."""
+    dev = uv_hm.device
+    ys = torch.arange(hh, device=dev).float()[None, None, :, None]
+    xs = torch.arange(hw, device=dev).float()[None, None, None, :]
+    g = torch.exp(-((xs - uv_hm[..., 0, None, None]) ** 2 + (ys - uv_hm[..., 1, None, None]) ** 2) / (2 * sigma ** 2))
+    return g * valid[..., None, None]
+
+
+def decode(hm_logits, dp, win=2):
+    """Heatmaps -> uv in heatmap px (sub-pixel), confidence, depth at peak."""
+    B, K, H, W = hm_logits.shape
+    p = torch.sigmoid(hm_logits)
+    flat = p.reshape(B, K, -1)
+    conf, idx = flat.max(-1)
+    py, px = (idx // W).float(), (idx % W).float()
+    # soft-argmax in a small window around the peak
+    ys = torch.arange(H, device=p.device).float()
+    xs = torch.arange(W, device=p.device).float()
+    my = ((ys[None, None, :] - py[..., None]).abs() <= win).float()
+    mx = ((xs[None, None, :] - px[..., None]).abs() <= win).float()
+    m = my[..., :, None] * mx[..., None, :]
+    w = p * m
+    s = w.sum((-1, -2)).clamp(min=1e-8)
+    u = (w * xs[None, None, None, :]).sum((-1, -2)) / s
+    v = (w * ys[None, None, :, None]).sum((-1, -2)) / s
+    d = (dp * (w / s[..., None, None])).sum((-1, -2))
+    return torch.stack([u, v], -1), conf, d

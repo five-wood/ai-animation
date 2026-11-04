@@ -1,0 +1,381 @@
+{
+  "schema": "temporal-benchmark-v1",
+  "unit_tests": {
+    "passed": true,
+    "tests_run": 2
+  },
+  "inputs": {
+    "rig": {
+      "path": "/data/video2rig/projects/lizard/rig.json",
+      "sha256": "7cc1ae8530a7851dfecc7ecec49cb44a9ae5e453bdda20da08e64912596a37a2"
+    },
+    "studio": {
+      "path": "/data/video2rig/projects/lizard/studio.json",
+      "sha256": "fa931724b965dce5997e8f346655d4b3f3b0365281fc957cd833f57b372cb28e"
+    },
+    "motion": {
+      "path": "/data/video2rig/projects/lizard/exam/frames/motion_gt.json",
+      "sha256": "21450d49113ff02a63ed73e9cd6f515684b56aac37c03fe8640c27ea94d8660c"
+    }
+  },
+  "config": {
+    "fps": [
+      24,
+      30,
+      60
+    ],
+    "source_fps": 30.0,
+    "start_seconds": 0.0,
+    "duration_seconds": 2.0,
+    "half_open_interval": true,
+    "seed": 20260714,
+    "quick": false,
+    "device": "cuda",
+    "legacy_iters": 900,
+    "temporal_warm_iters": 900,
+    "temporal_iters": 850,
+    "temporal_initial": null,
+    "weights": "uniform",
+    "legacy_weights": "uniform 0.9 including outliers",
+    "temporal_weights": "uniform",
+    "heat_quality": null,
+    "depth": null,
+    "position_strength": 400.0,
+    "local_strength": 24.0,
+    "root_strength": 40.0,
+    "preprocessing": "shared raw uniform-weight DLT; no cleanup or GT initialisation; optional temporal-only fused weights",
+    "source_fk_max_abs_pct_size": 5.4868627877558814e-05,
+    "pixel_scale": 353.7564266797609,
+    "outlier_events": [
+      {
+        "time_seconds": 0.48,
+        "half_width_seconds": 0.042,
+        "view": 0,
+        "joint": 22,
+        "offset_px": [
+          24.795196181359643,
+          -9.440924176150563
+        ]
+      },
+      {
+        "time_seconds": 1.06,
+        "half_width_seconds": 0.042,
+        "view": 1,
+        "joint": 9,
+        "offset_px": [
+          26.13372812396935,
+          4.578324727931522
+        ]
+      },
+      {
+        "time_seconds": 1.58,
+        "half_width_seconds": 0.042,
+        "view": 1,
+        "joint": 20,
+        "offset_px": [
+          26.389266666192835,
+          2.745798206806098
+        ]
+      }
+    ],
+    "noise_rms_fraction_pixel_scale": 0.002,
+    "common_24hz_times_seconds": [
+      0.0,
+      0.041666666666666664,
+      0.08333333333333333,
+      0.125,
+      0.16666666666666666,
+      0.20833333333333334,
+      0.25,
+      0.2916666666666667,
+      0.3333333333333333,
+      0.375,
+      0.4166666666666667,
+      0.4583333333333333,
+      0.5,
+      0.5416666666666666,
+      0.5833333333333334,
+      0.625,
+      0.6666666666666666,
+      0.7083333333333334,
+      0.75,
+      0.7916666666666666,
+      0.8333333333333334,
+      0.875,
+      0.9166666666666666,
+      0.9583333333333334,
+      1.0,
+      1.0416666666666667,
+      1.0833333333333333,
+      1.125,
+      1.1666666666666667,
+      1.2083333333333333,
+      1.25,
+      1.2916666666666667,
+      1.3333333333333333,
+      1.375,
+      1.4166666666666667,
+      1.4583333333333333,
+      1.5,
+      1.5416666666666667,
+      1.5833333333333333,
+      1.625,
+      1.6666666666666667,
+      1.7083333333333333,
+      1.75,
+      1.7916666666666667,
+      1.8333333333333333,
+      1.875,
+      1.9166666666666667,
+      1.9583333333333333
+    ],
+    "iteration_budget_note": "legacy baseline matches temporal warm only; temporal adds refinement and built-in polish"
+  },
+  "environment": {
+    "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+    "numpy": "2.4.6",
+    "torch": "2.7.0+cu128",
+    "scipy": "1.17.1",
+    "cuda": "12.8",
+    "device_name": "NVIDIA GeForce RTX 4090",
+    "deterministic_algorithms": true
+  },
+  "runs": [
+    {
+      "mode": "noise",
+      "fps": 24,
+      "frames": 48,
+      "solver": "legacy",
+      "weight_mode": "uniform",
+      "weight_min": 0.9,
+      "weight_mean": 0.9000000000000002,
+      "seconds": 16.166238537058234,
+      "outlier_observation_count": 6,
+      "observation_rms_px": 0.8700868790764562,
+      "metrics": {
+        "joint_mean_pct_size": 0.13044245056591525,
+        "joint_p90_pct_size": 0.22595631215894105,
+        "bone_direction_mean_deg": 1.058210472809685,
+        "root_rotation_accel_rms_rad_s2": 3.834292164138012,
+        "root_rotation_accel_gt_rms_rad_s2": 1.5968573232681962,
+        "root_rotation_accel_error_rms_rad_s2": 3.539047358649144,
+        "local_rotation_accel_rms_rad_s2": 25.62612070563694,
+        "local_rotation_accel_gt_rms_rad_s2": 25.320883664812715,
+        "local_rotation_accel_error_rms_rad_s2": 13.246844267268465,
+        "root_height_amplitude_pct_size": 5.680157544579827,
+        "root_height_gt_amplitude_pct_size": 5.665867021723005,
+        "root_height_rmse_pct_size": 0.05488581355954545
+      }
+    },
+    {
+      "mode": "noise",
+      "fps": 24,
+      "frames": 48,
+      "solver": "temporal",
+      "weight_mode": "uniform",
+      "weight_min": 0.9,
+      "weight_mean": 0.9000000000000002,
+      "seconds": 25.198251368943602,
+      "outlier_observation_count": 6,
+      "observation_rms_px": 0.8700868790764562,
+      "metrics": {
+        "joint_mean_pct_size": 0.15595383180135866,
+        "joint_p90_pct_size": 0.2728553032153056,
+        "bone_direction_mean_deg": 1.1463972159189626,
+        "root_rotation_accel_rms_rad_s2": 1.7752296762414537,
+        "root_rotation_accel_gt_rms_rad_s2": 1.5968573232681962,
+        "root_rotation_accel_error_rms_rad_s2": 1.2455491432185672,
+        "local_rotation_accel_rms_rad_s2": 21.34526471064012,
+        "local_rotation_accel_gt_rms_rad_s2": 25.320883664812715,
+        "local_rotation_accel_error_rms_rad_s2": 10.9981998670379,
+        "root_height_amplitude_pct_size": 5.607787709975801,
+        "root_height_gt_amplitude_pct_size": 5.665867021723005,
+        "root_height_rmse_pct_size": 0.09438540473111437
+      }
+    },
+    {
+      "mode": "noise",
+      "fps": 30,
+      "frames": 60,
+      "solver": "legacy",
+      "weight_mode": "uniform",
+      "weight_min": 0.9,
+      "weight_mean": 0.9000000000000002,
+      "seconds": 12.939252462005243,
+      "outlier_observation_count": 7,
+      "observation_rms_px": 0.8830242185123287,
+      "metrics": {
+        "joint_mean_pct_size": 0.12827667260275832,
+        "joint_p90_pct_size": 0.22757101544887254,
+        "bone_direction_mean_deg": 1.0587010766249099,
+        "root_rotation_accel_rms_rad_s2": 4.232604083485054,
+        "root_rotation_accel_gt_rms_rad_s2": 1.6027961678160307,
+        "root_rotation_accel_error_rms_rad_s2": 3.9450245011017175,
+        "local_rotation_accel_rms_rad_s2": 26.302551868669326,
+        "local_rotation_accel_gt_rms_rad_s2": 25.617259564848606,
+        "local_rotation_accel_error_rms_rad_s2": 14.134901135975673,
+        "root_height_amplitude_pct_size": 5.879582088294435,
+        "root_height_gt_amplitude_pct_size": 5.964921688462576,
+        "root_height_rmse_pct_size": 0.054141140435816644
+      }
+    },
+    {
+      "mode": "noise",
+      "fps": 30,
+      "frames": 60,
+      "solver": "temporal",
+      "weight_mode": "uniform",
+      "weight_min": 0.9,
+      "weight_mean": 0.9000000000000002,
+      "seconds": 22.379461980075575,
+      "outlier_observation_count": 7,
+      "observation_rms_px": 0.8830242185123287,
+      "metrics": {
+        "joint_mean_pct_size": 0.1610624063883513,
+        "joint_p90_pct_size": 0.2905025504845515,
+        "bone_direction_mean_deg": 1.1503808746729849,
+        "root_rotation_accel_rms_rad_s2": 1.8019452618368683,
+        "root_rotation_accel_gt_rms_rad_s2": 1.6027961678160307,
+        "root_rotation_accel_error_rms_rad_s2": 1.269439501720625,
+        "local_rotation_accel_rms_rad_s2": 21.589908565553543,
+        "local_rotation_accel_gt_rms_rad_s2": 25.617259564848606,
+        "local_rotation_accel_error_rms_rad_s2": 11.243775910630397,
+        "root_height_amplitude_pct_size": 5.650017907772349,
+        "root_height_gt_amplitude_pct_size": 5.964921688462576,
+        "root_height_rmse_pct_size": 0.11377707208343708
+      }
+    },
+    {
+      "mode": "noise",
+      "fps": 60,
+      "frames": 120,
+      "solver": "legacy",
+      "weight_mode": "uniform",
+      "weight_min": 0.9,
+      "weight_mean": 0.9000000000000002,
+      "seconds": 12.78234562696889,
+      "outlier_observation_count": 15,
+      "observation_rms_px": 0.8890185107129404,
+      "metrics": {
+        "joint_mean_pct_size": 0.13245263735601287,
+        "joint_p90_pct_size": 0.2282467168020217,
+        "bone_direction_mean_deg": 1.1009997694000944,
+        "root_rotation_accel_rms_rad_s2": 7.884247805919104,
+        "root_rotation_accel_gt_rms_rad_s2": 2.291882119587526,
+        "root_rotation_accel_error_rms_rad_s2": 7.757509960496666,
+        "local_rotation_accel_rms_rad_s2": 52.68284108785316,
+        "local_rotation_accel_gt_rms_rad_s2": 35.82717330007163,
+        "local_rotation_accel_error_rms_rad_s2": 49.119232223102266,
+        "root_height_amplitude_pct_size": 5.900701367597836,
+        "root_height_gt_amplitude_pct_size": 5.964921688462576,
+        "root_height_rmse_pct_size": 0.05244093011995106
+      }
+    },
+    {
+      "mode": "noise",
+      "fps": 60,
+      "frames": 120,
+      "solver": "temporal",
+      "weight_mode": "uniform",
+      "weight_min": 0.9,
+      "weight_mean": 0.9000000000000002,
+      "seconds": 22.949460190022364,
+      "outlier_observation_count": 15,
+      "observation_rms_px": 0.8890185107129404,
+      "metrics": {
+        "joint_mean_pct_size": 0.18866637949984516,
+        "joint_p90_pct_size": 0.3297946091040636,
+        "bone_direction_mean_deg": 1.543646746447913,
+        "root_rotation_accel_rms_rad_s2": 1.8549343740128796,
+        "root_rotation_accel_gt_rms_rad_s2": 2.291882119587526,
+        "root_rotation_accel_error_rms_rad_s2": 2.10187736306808,
+        "local_rotation_accel_rms_rad_s2": 22.382358240553256,
+        "local_rotation_accel_gt_rms_rad_s2": 35.82717330007163,
+        "local_rotation_accel_error_rms_rad_s2": 27.97038482728766,
+        "root_height_amplitude_pct_size": 5.622209905902262,
+        "root_height_gt_amplitude_pct_size": 5.964921688462576,
+        "root_height_rmse_pct_size": 0.11622253578462952
+      }
+    }
+  ],
+  "cross_fps_24hz": [
+    {
+      "mode": "noise",
+      "solver": "legacy",
+      "fps_pair": [
+        24,
+        30
+      ],
+      "samples_24hz": 48,
+      "joint_trajectory_mean_pct_size": 0.030064091162689988,
+      "joint_trajectory_rms_pct_size": 0.060089434329398464,
+      "gt_interpolation_floor_mean_pct_size": 0.022282973838508136,
+      "error_trajectory_difference_mean_pct_size": 0.01604208831227678
+    },
+    {
+      "mode": "noise",
+      "solver": "legacy",
+      "fps_pair": [
+        24,
+        60
+      ],
+      "samples_24hz": 48,
+      "joint_trajectory_mean_pct_size": 0.024555785471063362,
+      "joint_trajectory_rms_pct_size": 0.05163158070627488,
+      "gt_interpolation_floor_mean_pct_size": 0.004471217725202702,
+      "error_trajectory_difference_mean_pct_size": 0.024651532363953177
+    },
+    {
+      "mode": "noise",
+      "solver": "legacy",
+      "fps_pair": [
+        30,
+        60
+      ],
+      "samples_24hz": 48,
+      "joint_trajectory_mean_pct_size": 0.03106595921769335,
+      "joint_trajectory_rms_pct_size": 0.09069891966371572,
+      "gt_interpolation_floor_mean_pct_size": 0.017819376704447016,
+      "error_trajectory_difference_mean_pct_size": 0.01853866319311369
+    },
+    {
+      "mode": "noise",
+      "solver": "temporal",
+      "fps_pair": [
+        24,
+        30
+      ],
+      "samples_24hz": 48,
+      "joint_trajectory_mean_pct_size": 0.03197903629783244,
+      "joint_trajectory_rms_pct_size": 0.04800968030834876,
+      "gt_interpolation_floor_mean_pct_size": 0.022282973838508136,
+      "error_trajectory_difference_mean_pct_size": 0.016469063293500636
+    },
+    {
+      "mode": "noise",
+      "solver": "temporal",
+      "fps_pair": [
+        24,
+        60
+      ],
+      "samples_24hz": 48,
+      "joint_trajectory_mean_pct_size": 0.08523172101100174,
+      "joint_trajectory_rms_pct_size": 0.12645022756456414,
+      "gt_interpolation_floor_mean_pct_size": 0.004471217725202702,
+      "error_trajectory_difference_mean_pct_size": 0.08460862173766351
+    },
+    {
+      "mode": "noise",
+      "solver": "temporal",
+      "fps_pair": [
+        30,
+        60
+      ],
+      "samples_24hz": 48,
+      "joint_trajectory_mean_pct_size": 0.09143123728118288,
+      "joint_trajectory_rms_pct_size": 0.1286415644211909,
+      "gt_interpolation_floor_mean_pct_size": 0.017819376704447016,
+      "error_trajectory_difference_mean_pct_size": 0.0830536666708561
+    }
+  ]
+}

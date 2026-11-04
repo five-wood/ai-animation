@@ -1,0 +1,63 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- 3D / DCC source assets (too large for git; keep outside the repo) ---
+*.max
+*.fbx
+*.blend
+*.blend1
+*.glb
+*.gltf
+*.bvh
+*.obj
+*.abc
+
+# --- Media ---
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.m4a
+*.wav
+*.mp3
+Videos/
+videos_in/
+
+# --- Generated experiment outputs ---
+work/frames/
+work/srv/
+work/dl/
+work/analyze/**/*.jpg
+work/analyze/**/*.png
+work/analyze/**/*.npz
+work/analyze/**/*.mp4
+work/analyze/**/*.csv
+video2rig/results/
+
+# --- Training weights and bulky numeric dumps ---
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.npy
+*.npz
+
+# --- Logs ---
+*.log
+
+# --- OS / editor ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/

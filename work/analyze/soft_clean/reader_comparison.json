@@ -1,0 +1,83 @@
+{
+ "note": "Old videos retain shadows. These tests are compatibility only, not isolated causality or real-video GT accuracy. Synthetic exam is clean-domain; no same-pose legacy-light exam is used here.",
+ "runs": [
+  {
+   "reader": "lizard",
+   "clip": "xiyi",
+   "frames": 121,
+   "fps": 24.0,
+   "seconds": 6.192047357559204,
+   "ray_median_pct": 1.5812287515587755,
+   "bad_frames": 46,
+   "same_move": false,
+   "uv_accel_median_px": 5.7962965965271,
+   "uv_accel_p90_px": 39.697776794433594
+  },
+  {
+   "reader": "lizard",
+   "clip": "xiyi2",
+   "frames": 121,
+   "fps": 24.0,
+   "seconds": 5.809905767440796,
+   "ray_median_pct": 0.5611238734807779,
+   "bad_frames": 0,
+   "same_move": true,
+   "uv_accel_median_px": 0.6174310445785522,
+   "uv_accel_p90_px": 3.4820804595947266
+  },
+  {
+   "reader": "lizard",
+   "clip": "clean_exam",
+   "frames": 150,
+   "fps": 30.0,
+   "seconds": 6.841564893722534,
+   "ray_median_pct": 0.41603809370091577,
+   "bad_frames": 0,
+   "same_move": true,
+   "uv_accel_median_px": 4.929286003112793,
+   "uv_accel_p90_px": 18.39801597595215,
+   "gt_2d_median_px": 2.7702781699181984,
+   "gt_2d_mean_px": 5.386343071967496,
+   "gt_2d_p90_px": 10.448557037897874
+  },
+  {
+   "reader": "lizard_clean",
+   "clip": "xiyi",
+   "frames": 121,
+   "fps": 24.0,
+   "seconds": 5.800354480743408,
+   "ray_median_pct": 2.4393957604442407,
+   "bad_frames": 54,
+   "same_move": false,
+   "uv_accel_median_px": 6.821143627166748,
+   "uv_accel_p90_px": 79.94534301757812
+  },
+  {
+   "reader": "lizard_clean",
+   "clip": "xiyi2",
+   "frames": 121,
+   "fps": 24.0,
+   "seconds": 5.805888652801514,
+   "ray_median_pct": 1.1169839437599571,
+   "bad_frames": 0,
+   "same_move": true,
+   "uv_accel_median_px": 0.8788809776306152,
+   "uv_accel_p90_px": 4.942049026489258
+  },
+  {
+   "reader": "lizard_clean",
+   "clip": "clean_exam",
+   "frames": 150,
+   "fps": 30.0,
+   "seconds": 7.169768571853638,
+   "ray_median_pct": 0.4235395663458748,
+   "bad_frames": 0,
+   "same_move": true,
+   "uv_accel_median_px": 5.045368194580078,
+   "uv_accel_p90_px": 19.205459594726562,
+   "gt_2d_median_px": 3.0075318835669664,
+   "gt_2d_mean_px": 5.718825903721941,
+   "gt_2d_p90_px": 10.55858713711841
+  }
+ ]
+}

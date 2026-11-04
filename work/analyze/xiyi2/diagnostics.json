@@ -1,0 +1,318 @@
+{
+ "version": 1,
+ "frames": 121,
+ "fps": 24.0,
+ "duration_seconds": 5.041666666666667,
+ "decision": "consistent",
+ "meaning": "Two-view detections disagree under the reference cameras; this alone does not prove that the generated motions differ.",
+ "thresholds": {
+  "frame_ray_pct": 3.0,
+  "frame_bonelen_relative": 0.35,
+  "maximum_bad_fraction_exclusive": 0.25
+ },
+ "bad_ranges": [],
+ "ray_flagged_frames": 0,
+ "bonelen_flagged_frames": 0,
+ "low_confidence_frames": 0,
+ "keypoints": [
+  {
+   "index": 23,
+   "name": "ankle.L.tip",
+   "side": "L",
+   "median_ray_pct": 2.763499282086467,
+   "p90_ray_pct": 4.932045942568964,
+   "flagged_segment_median_ray_pct": 2.763499282086467,
+   "mean_confidence": 0.7434537410736084,
+   "valid_frames": 121
+  },
+  {
+   "index": 22,
+   "name": "ankle.L",
+   "side": "L",
+   "median_ray_pct": 2.618161016702738,
+   "p90_ray_pct": 6.290398425849464,
+   "flagged_segment_median_ray_pct": 2.618161016702738,
+   "mean_confidence": 0.7862794399261475,
+   "valid_frames": 121
+  },
+  {
+   "index": 19,
+   "name": "tail4.tip",
+   "side": "M",
+   "median_ray_pct": 2.5664444215245483,
+   "p90_ray_pct": 5.020122083684528,
+   "flagged_segment_median_ray_pct": 2.5664444215245483,
+   "mean_confidence": 0.666471540927887,
+   "valid_frames": 94
+  },
+  {
+   "index": 18,
+   "name": "tail4",
+   "side": "M",
+   "median_ray_pct": 2.4187551493524584,
+   "p90_ray_pct": 4.34607587417568,
+   "flagged_segment_median_ray_pct": 2.4187551493524584,
+   "mean_confidence": 0.6234803199768066,
+   "valid_frames": 87
+  },
+  {
+   "index": 17,
+   "name": "tail3",
+   "side": "M",
+   "median_ray_pct": 1.8995191842642465,
+   "p90_ray_pct": 4.779669017196556,
+   "flagged_segment_median_ray_pct": 1.8995191842642465,
+   "mean_confidence": 0.630742073059082,
+   "valid_frames": 109
+  },
+  {
+   "index": 9,
+   "name": "wrist.L",
+   "side": "L",
+   "median_ray_pct": 1.6636361090555183,
+   "p90_ray_pct": 1.9015081071560445,
+   "flagged_segment_median_ray_pct": 1.6636361090555183,
+   "mean_confidence": 0.79693603515625,
+   "valid_frames": 121
+  },
+  {
+   "index": 13,
+   "name": "wrist.R",
+   "side": "R",
+   "median_ray_pct": 1.410022929497489,
+   "p90_ray_pct": 1.9315434276963985,
+   "flagged_segment_median_ray_pct": 1.410022929497489,
+   "mean_confidence": 0.79977947473526,
+   "valid_frames": 121
+  },
+  {
+   "index": 15,
+   "name": "tail1",
+   "side": "M",
+   "median_ray_pct": 1.2198620440273324,
+   "p90_ray_pct": 1.6517952795134068,
+   "flagged_segment_median_ray_pct": 1.2198620440273324,
+   "mean_confidence": 0.6836627125740051,
+   "valid_frames": 121
+  },
+  {
+   "index": 21,
+   "name": "knee.L",
+   "side": "L",
+   "median_ray_pct": 1.1322278357928992,
+   "p90_ray_pct": 1.9986638368993739,
+   "flagged_segment_median_ray_pct": 1.1322278357928992,
+   "mean_confidence": 0.7013080716133118,
+   "valid_frames": 121
+  },
+  {
+   "index": 27,
+   "name": "ankle.R.tip",
+   "side": "R",
+   "median_ray_pct": 0.8393022512885668,
+   "p90_ray_pct": 6.664104701984205,
+   "flagged_segment_median_ray_pct": 0.8393022512885668,
+   "mean_confidence": 0.7420944571495056,
+   "valid_frames": 121
+  },
+  {
+   "index": 14,
+   "name": "wrist.R.tip",
+   "side": "R",
+   "median_ray_pct": 0.8191202012120582,
+   "p90_ray_pct": 1.647555450293418,
+   "flagged_segment_median_ray_pct": 0.8191202012120582,
+   "mean_confidence": 0.8674006462097168,
+   "valid_frames": 121
+  },
+  {
+   "index": 11,
+   "name": "shoulder.R",
+   "side": "R",
+   "median_ray_pct": 0.7862068854398604,
+   "p90_ray_pct": 1.0229490989488779,
+   "flagged_segment_median_ray_pct": 0.7862068854398604,
+   "mean_confidence": 0.7634848356246948,
+   "valid_frames": 121
+  },
+  {
+   "index": 12,
+   "name": "elbow.R",
+   "side": "R",
+   "median_ray_pct": 0.7819738509278473,
+   "p90_ray_pct": 1.1321874574753341,
+   "flagged_segment_median_ray_pct": 0.7819738509278473,
+   "mean_confidence": 0.7703365683555603,
+   "valid_frames": 121
+  },
+  {
+   "index": 16,
+   "name": "tail2",
+   "side": "M",
+   "median_ray_pct": 0.7791754558290277,
+   "p90_ray_pct": 1.1065178647507152,
+   "flagged_segment_median_ray_pct": 0.7791754558290277,
+   "mean_confidence": 0.6632741093635559,
+   "valid_frames": 121
+  },
+  {
+   "index": 25,
+   "name": "knee.R",
+   "side": "R",
+   "median_ray_pct": 0.7234636555324289,
+   "p90_ray_pct": 1.1300089423307709,
+   "flagged_segment_median_ray_pct": 0.7234636555324289,
+   "mean_confidence": 0.7774258255958557,
+   "valid_frames": 121
+  },
+  {
+   "index": 26,
+   "name": "ankle.R",
+   "side": "R",
+   "median_ray_pct": 0.6939945647956436,
+   "p90_ray_pct": 4.213543397676799,
+   "flagged_segment_median_ray_pct": 0.6939945647956436,
+   "mean_confidence": 0.7591420412063599,
+   "valid_frames": 121
+  },
+  {
+   "index": 6,
+   "name": "head.tip",
+   "side": "M",
+   "median_ray_pct": 0.5604578986718637,
+   "p90_ray_pct": 0.8205519642104541,
+   "flagged_segment_median_ray_pct": 0.5604578986718637,
+   "mean_confidence": 0.8279494047164917,
+   "valid_frames": 121
+  },
+  {
+   "index": 2,
+   "name": "spine2",
+   "side": "M",
+   "median_ray_pct": 0.4093223036256085,
+   "p90_ray_pct": 0.6909847436669591,
+   "flagged_segment_median_ray_pct": 0.4093223036256085,
+   "mean_confidence": 0.78155517578125,
+   "valid_frames": 121
+  },
+  {
+   "index": 0,
+   "name": "hips",
+   "side": "M",
+   "median_ray_pct": 0.4081490383654373,
+   "p90_ray_pct": 0.7259728238579127,
+   "flagged_segment_median_ray_pct": 0.4081490383654373,
+   "mean_confidence": 0.6854751706123352,
+   "valid_frames": 121
+  },
+  {
+   "index": 8,
+   "name": "elbow.L",
+   "side": "L",
+   "median_ray_pct": 0.37123668730783865,
+   "p90_ray_pct": 1.3442786642580073,
+   "flagged_segment_median_ray_pct": 0.37123668730783865,
+   "mean_confidence": 0.7887689471244812,
+   "valid_frames": 121
+  },
+  {
+   "index": 1,
+   "name": "spine1",
+   "side": "M",
+   "median_ray_pct": 0.346823203499644,
+   "p90_ray_pct": 0.504763967853406,
+   "flagged_segment_median_ray_pct": 0.346823203499644,
+   "mean_confidence": 0.7303382158279419,
+   "valid_frames": 121
+  },
+  {
+   "index": 24,
+   "name": "hip.R",
+   "side": "R",
+   "median_ray_pct": 0.30045476895666356,
+   "p90_ray_pct": 0.4119767000759312,
+   "flagged_segment_median_ray_pct": 0.30045476895666356,
+   "mean_confidence": 0.7608642578125,
+   "valid_frames": 121
+  },
+  {
+   "index": 20,
+   "name": "hip.L",
+   "side": "L",
+   "median_ray_pct": 0.29760866560737426,
+   "p90_ray_pct": 0.5263282632769228,
+   "flagged_segment_median_ray_pct": 0.29760866560737426,
+   "mean_confidence": 0.7384200692176819,
+   "valid_frames": 121
+  },
+  {
+   "index": 5,
+   "name": "head",
+   "side": "M",
+   "median_ray_pct": 0.28746378712576154,
+   "p90_ray_pct": 0.36617045380412955,
+   "flagged_segment_median_ray_pct": 0.28746378712576154,
+   "mean_confidence": 0.8725185990333557,
+   "valid_frames": 121
+  },
+  {
+   "index": 10,
+   "name": "wrist.L.tip",
+   "side": "L",
+   "median_ray_pct": 0.27775329710083646,
+   "p90_ray_pct": 1.2840672209084405,
+   "flagged_segment_median_ray_pct": 0.27775329710083646,
+   "mean_confidence": 0.8451740145683289,
+   "valid_frames": 121
+  },
+  {
+   "index": 4,
+   "name": "neck",
+   "side": "M",
+   "median_ray_pct": 0.20512713060481402,
+   "p90_ray_pct": 0.39882654876341567,
+   "flagged_segment_median_ray_pct": 0.20512713060481402,
+   "mean_confidence": 0.7792994976043701,
+   "valid_frames": 121
+  },
+  {
+   "index": 7,
+   "name": "shoulder.L",
+   "side": "L",
+   "median_ray_pct": 0.20026008136480958,
+   "p90_ray_pct": 0.4091887121837976,
+   "flagged_segment_median_ray_pct": 0.20026008136480958,
+   "mean_confidence": 0.7156400084495544,
+   "valid_frames": 121
+  },
+  {
+   "index": 3,
+   "name": "chest",
+   "side": "M",
+   "median_ray_pct": 0.1919331863396475,
+   "p90_ray_pct": 0.4659317195715141,
+   "flagged_segment_median_ray_pct": 0.1919331863396475,
+   "mean_confidence": 0.792073667049408,
+   "valid_frames": 121
+  }
+ ],
+ "note": "Confidence is the heatmap peak, not a calibrated probability. Occlusion, identity swaps, re-framing, detector domain shift and truly inconsistent video can all increase residuals.",
+ "calibration": [
+  {
+   "view": "front",
+   "scale": 1.0225919585993797,
+   "tx": 0.7230822536759547,
+   "ty": 1.2342715857042208,
+   "rest_match_px": 6.382376305121802,
+   "used": true
+  },
+  {
+   "view": "side",
+   "scale": 0.9930346666783841,
+   "tx": 0.5361980417696373,
+   "ty": -0.9697283955235889,
+   "rest_match_px": 5.310366655492622,
+   "used": false
+  }
+ ]
+}

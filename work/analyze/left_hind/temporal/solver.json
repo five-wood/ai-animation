@@ -1,0 +1,21 @@
+{
+ "mode": "temporal-v1-experimental",
+ "fps": 24.0,
+ "warm_iters": 900,
+ "refine_iters": 850,
+ "position_strength": 400.0,
+ "local_strength": 24.0,
+ "root_strength": 40.0,
+ "objective": 0.08410852402448654,
+ "terms": {
+  "image": 0.08373118191957474,
+  "tri3d": 2.4808123271213844e-05,
+  "world_acc": 8.848812285577878e-05,
+  "local_acc": 0.0002175829140469432,
+  "root_acc": 1.4176743206917308e-05,
+  "centre_acc": 2.2492655261885375e-05,
+  "depth": 9.719687113829423e-06
+ },
+ "contact_constraints": false,
+ "post_filter": false
+}

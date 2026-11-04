@@ -1,0 +1,140 @@
+{
+  "hip.L_front": {
+    "factor_min": {
+      "bounds_factor": 1.0,
+      "peak_factor": 0.6654083281755447,
+      "temporal_factor": 1.0,
+      "bone_factor": 1.0,
+      "ray_factor": 0.9907011843144098,
+      "ambiguity_factor": 0.8204353262740904,
+      "spread_factor": 0.9810192507430211
+    },
+    "res_gt20_n": 0,
+    "weight_ge0.5_n": 49,
+    "highweight_and_res_gt20_n": 0,
+    "lowres_le5_n": 49,
+    "weight_ge0.5_reproj_median": 2.751731590850702,
+    "weight_ge0.5_reproj_max": 2.988377150684351
+  },
+  "hip.L_side": {
+    "factor_min": {
+      "bounds_factor": 1.0,
+      "peak_factor": 0.8199549227952957,
+      "temporal_factor": 1.0,
+      "bone_factor": 1.0,
+      "ray_factor": 0.9907011843144098,
+      "ambiguity_factor": 1.0,
+      "spread_factor": 0.5278358541506611
+    },
+    "res_gt20_n": 0,
+    "weight_ge0.5_n": 0,
+    "highweight_and_res_gt20_n": 0,
+    "lowres_le5_n": 49
+  },
+  "knee.L_front": {
+    "factor_min": {
+      "bounds_factor": 1.0,
+      "peak_factor": 0.6821400493383408,
+      "temporal_factor": 1.0,
+      "bone_factor": 0.9915860151467746,
+      "ray_factor": 0.9517074385019633,
+      "ambiguity_factor": 0.6649780259819131,
+      "spread_factor": 0.9816365193705638
+    },
+    "res_gt20_n": 0,
+    "weight_ge0.5_n": 11,
+    "highweight_and_res_gt20_n": 0,
+    "lowres_le5_n": 49,
+    "weight_ge0.5_reproj_median": 1.3368239630317742,
+    "weight_ge0.5_reproj_max": 2.8243610310885114
+  },
+  "knee.L_side": {
+    "factor_min": {
+      "bounds_factor": 1.0,
+      "peak_factor": 0.6687871634960175,
+      "temporal_factor": 1.0,
+      "bone_factor": 1.0,
+      "ray_factor": 0.9517074385019633,
+      "ambiguity_factor": 0.9877112910945607,
+      "spread_factor": 0.4818436883037456
+    },
+    "res_gt20_n": 0,
+    "weight_ge0.5_n": 0,
+    "highweight_and_res_gt20_n": 0,
+    "lowres_le5_n": 38
+  },
+  "ankle.L_front": {
+    "factor_min": {
+      "bounds_factor": 1.0,
+      "peak_factor": 0.5546489387750626,
+      "temporal_factor": 0.28645254926323865,
+      "bone_factor": 0.9637665584841342,
+      "ray_factor": 0.8327665688088186,
+      "ambiguity_factor": 0.4973977695167286,
+      "spread_factor": 0.9787854778920375
+    },
+    "res_gt20_n": 26,
+    "weight_ge0.5_n": 14,
+    "highweight_and_res_gt20_n": 0,
+    "lowres_le5_n": 16,
+    "res_gt20_weight_median": 0.23881564540318487,
+    "res_gt20_weight_range": [
+      0.20510003539873697,
+      0.25528330674681965
+    ],
+    "weight_ge0.5_reproj_median": 1.0491376184527674,
+    "weight_ge0.5_reproj_max": 2.1407185351570353
+  },
+  "ankle.L_side": {
+    "factor_min": {
+      "bounds_factor": 1.0,
+      "peak_factor": 0.8222239762544632,
+      "temporal_factor": 1.0,
+      "bone_factor": 1.0,
+      "ray_factor": 0.8327665688088186,
+      "ambiguity_factor": 0.6271308968668005,
+      "spread_factor": 0.48734992637488944
+    },
+    "res_gt20_n": 0,
+    "weight_ge0.5_n": 0,
+    "highweight_and_res_gt20_n": 0,
+    "lowres_le5_n": 32
+  },
+  "ankle.L.tip_front": {
+    "factor_min": {
+      "bounds_factor": 1.0,
+      "peak_factor": 0.4732530444860458,
+      "temporal_factor": 1.0,
+      "bone_factor": 0.9637665584841342,
+      "ray_factor": 0.8454269937521874,
+      "ambiguity_factor": 0.5177723289922928,
+      "spread_factor": 0.9782365538675539
+    },
+    "res_gt20_n": 31,
+    "weight_ge0.5_n": 7,
+    "highweight_and_res_gt20_n": 0,
+    "lowres_le5_n": 10,
+    "res_gt20_weight_median": 0.34445948118899605,
+    "res_gt20_weight_range": [
+      0.32857149069302194,
+      0.363106141713523
+    ],
+    "weight_ge0.5_reproj_median": 0.6487291202695841,
+    "weight_ge0.5_reproj_max": 3.3041760806829665
+  },
+  "ankle.L.tip_side": {
+    "factor_min": {
+      "bounds_factor": 1.0,
+      "peak_factor": 0.714291673898697,
+      "temporal_factor": 1.0,
+      "bone_factor": 1.0,
+      "ray_factor": 0.8454269937521874,
+      "ambiguity_factor": 0.7700101315952375,
+      "spread_factor": 0.4877369641581538
+    },
+    "res_gt20_n": 0,
+    "weight_ge0.5_n": 0,
+    "highweight_and_res_gt20_n": 0,
+    "lowres_le5_n": 47
+  }
+}

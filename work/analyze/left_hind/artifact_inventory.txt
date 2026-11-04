@@ -1,0 +1,133 @@
+KP 0 {'name': 'hips', 'bone': 0, 'type': 'head', 'rest_world': [0.0, 0.30000001192092896, 0.5], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 1 {'name': 'spine1', 'bone': 1, 'type': 'head', 'rest_world': [0.0, 0.05000000074505806, 0.5299999713897705], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 2 {'name': 'spine2', 'bone': 2, 'type': 'head', 'rest_world': [0.0, -0.18000000715255737, 0.5600000023841858], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 3 {'name': 'chest', 'bone': 3, 'type': 'head', 'rest_world': [0.0, -0.36000001430511475, 0.5799999833106995], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 4 {'name': 'neck', 'bone': 4, 'type': 'head', 'rest_world': [0.0, -0.5, 0.699999988079071], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 5 {'name': 'head', 'bone': 5, 'type': 'head', 'rest_world': [0.0, -0.6399999856948853, 0.800000011920929], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 6 {'name': 'head.tip', 'bone': 5, 'type': 'tail', 'rest_world': [0.0, -0.8716998451892382, 0.7503500455523396], 'tail_len': 0.23695989037291362, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 7 {'name': 'shoulder.L', 'bone': 6, 'type': 'head', 'rest_world': [0.17000000178813934, -0.33000001311302185, 0.5199999809265137], 'tail_len': 0.0, 'lat': -0.17000000178813934, 'side': 'L', 'mirror': 11}
+KP 8 {'name': 'elbow.L', 'bone': 7, 'type': 'head', 'rest_world': [0.27000001072883606, -0.27000001072883606, 0.30000001192092896], 'tail_len': 0.0, 'lat': -0.27000001072883606, 'side': 'L', 'mirror': 12}
+KP 9 {'name': 'wrist.L', 'bone': 8, 'type': 'head', 'rest_world': [0.27000001072883606, -0.33000001311302185, 0.07000000029802322], 'tail_len': 0.0, 'lat': -0.27000001072883606, 'side': 'L', 'mirror': 13}
+KP 10 {'name': 'wrist.L.tip', 'bone': 8, 'type': 'tail', 'rest_world': [0.28657544706099336, -0.4708913454331012, 0.036849095215813775], 'tail_len': 0.1456850436097104, 'lat': -0.28657544706099336, 'side': 'L', 'mirror': 14}
+KP 11 {'name': 'shoulder.R', 'bone': 9, 'type': 'head', 'rest_world': [-0.17000000178813934, -0.33000001311302185, 0.5199999809265137], 'tail_len': 0.0, 'lat': 0.17000000178813934, 'side': 'R', 'mirror': 7}
+KP 12 {'name': 'elbow.R', 'bone': 10, 'type': 'head', 'rest_world': [-0.27000001072883606, -0.27000001072883606, 0.30000001192092896], 'tail_len': 0.0, 'lat': 0.27000001072883606, 'side': 'R', 'mirror': 8}
+KP 13 {'name': 'wrist.R', 'bone': 11, 'type': 'head', 'rest_world': [-0.27000001072883606, -0.33000001311302185, 0.07000000029802322], 'tail_len': 0.0, 'lat': 0.27000001072883606, 'side': 'R', 'mirror': 9}
+KP 14 {'name': 'wrist.R.tip', 'bone': 11, 'type': 'tail', 'rest_world': [-0.28657544706099336, -0.4708913454331012, 0.036849095215813775], 'tail_len': 0.1456850436097104, 'lat': 0.28657544706099336, 'side': 'R', 'mirror': 10}
+KP 15 {'name': 'tail1', 'bone': 12, 'type': 'head', 'rest_world': [0.0, 0.550000011920929, 0.4699999988079071], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 16 {'name': 'tail2', 'bone': 13, 'type': 'head', 'rest_world': [0.0, 0.8500000238418579, 0.4000000059604645], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 17 {'name': 'tail3', 'bone': 14, 'type': 'head', 'rest_world': [0.0, 1.149999976158142, 0.33000001311302185], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 18 {'name': 'tail4', 'bone': 15, 'type': 'head', 'rest_world': [0.0, 1.4500000476837158, 0.27000001072883606], 'tail_len': 0.0, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 19 {'name': 'tail4.tip', 'bone': 15, 'type': 'tail', 'rest_world': [0.0, 1.6616394331801516, 0.2276721235377966], 'tail_len': 0.215830742526413, 'lat': 0.0, 'side': 'M', 'mirror': -1}
+KP 20 {'name': 'hip.L', 'bone': 16, 'type': 'head', 'rest_world': [0.17000000178813934, 0.3199999928474426, 0.46000000834465027], 'tail_len': 0.0, 'lat': -0.17000000178813934, 'side': 'L', 'mirror': 24}
+KP 21 {'name': 'knee.L', 'bone': 17, 'type': 'head', 'rest_world': [0.27000001072883606, 0.18000000715255737, 0.2800000011920929], 'tail_len': 0.0, 'lat': -0.27000001072883606, 'side': 'L', 'mirror': 25}
+KP 22 {'name': 'ankle.L', 'bone': 18, 'type': 'head', 'rest_world': [0.27000001072883606, 0.3400000035762787, 0.07999999821186066], 'tail_len': 0.0, 'lat': -0.27000001072883606, 'side': 'L', 'mirror': 26}
+KP 23 {'name': 'ankle.L.tip', 'bone': 18, 'type': 'tail', 'rest_world': [0.28657543801871416, 0.19910873576597268, 0.038561391394454574], 'tail_len': 0.14779138516767662, 'lat': -0.28657543801871416, 'side': 'L', 'mirror': 27}
+KP 24 {'name': 'hip.R', 'bone': 19, 'type': 'head', 'rest_world': [-0.17000000178813934, 0.3199999928474426, 0.46000000834465027], 'tail_len': 0.0, 'lat': 0.17000000178813934, 'side': 'R', 'mirror': 20}
+KP 25 {'name': 'knee.R', 'bone': 20, 'type': 'head', 'rest_world': [-0.27000001072883606, 0.18000000715255737, 0.2800000011920929], 'tail_len': 0.0, 'lat': 0.27000001072883606, 'side': 'R', 'mirror': 21}
+KP 26 {'name': 'ankle.R', 'bone': 21, 'type': 'head', 'rest_world': [-0.27000001072883606, 0.3400000035762787, 0.07999999821186066], 'tail_len': 0.0, 'lat': 0.27000001072883606, 'side': 'R', 'mirror': 22}
+KP 27 {'name': 'ankle.R.tip', 'bone': 21, 'type': 'tail', 'rest_world': [-0.2865754365981689, 0.19910874784061866, 0.038561394945820913], 'tail_len': 0.14779137250167768, 'lat': 0.2865754365981689, 'side': 'R', 'mirror': 23}
+BONE 0 hips parent -1 active_index None limits [[-180, 180], [-180, 180], [-180, 180]]
+BONE 1 spine1 parent 0 active_index 0 limits [[-35, 35], [-20, 20], [-30, 30]]
+BONE 2 spine2 parent 1 active_index 1 limits [[-35, 35], [-20, 20], [-30, 30]]
+BONE 3 chest parent 2 active_index 2 limits [[-35, 35], [-20, 20], [-30, 30]]
+BONE 4 neck parent 3 active_index 3 limits [[-35, 35], [-20, 20], [-30, 30]]
+BONE 5 head parent 4 active_index 4 limits [[-35, 35], [-20, 20], [-30, 30]]
+BONE 6 shoulder.L parent 3 active_index 5 limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 7 elbow.L parent 6 active_index 6 limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 8 wrist.L parent 7 active_index None limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 9 shoulder.R parent 3 active_index 7 limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 10 elbow.R parent 9 active_index 8 limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 11 wrist.R parent 10 active_index None limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 12 tail1 parent 0 active_index 9 limits [[-35, 35], [-20, 20], [-30, 30]]
+BONE 13 tail2 parent 12 active_index 10 limits [[-35, 35], [-20, 20], [-30, 30]]
+BONE 14 tail3 parent 13 active_index 11 limits [[-35, 35], [-20, 20], [-30, 30]]
+BONE 15 tail4 parent 14 active_index 12 limits [[-35, 35], [-20, 20], [-30, 30]]
+BONE 16 hip.L parent 0 active_index 13 limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 17 knee.L parent 16 active_index 14 limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 18 ankle.L parent 17 active_index None limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 19 hip.R parent 0 active_index 15 limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 20 knee.R parent 19 active_index 16 limits [[-75, 75], [-30, 30], [-50, 50]]
+BONE 21 ankle.R parent 20 active_index None limits [[-75, 75], [-30, 30], [-50, 50]]
+xiyi2 reading.npz b3705103134f2f01bb872339519ae5bad1ac60c70c53260da930188d08ceaa7e
+uv (121, 2, 28, 2) float32 min 65.50498 max 572.47327
+uv_raw (121, 2, 28, 2) float32 min 65.50498 max 572.47327
+conf (121, 2, 28) float32 min 0.18010667 max 0.9390248
+depth (121, 2, 28) float32 min -0.42062038 max 0.65263855
+X (121, 28, 3) float64 min -0.877071742587231 max 1.7003744233959883
+res (121, 28, 2) float64 min 0.0032016023174804083 max 50.54130066001335
+X_fit (121, 28, 3) float64 min -0.877071742587231 max 1.7008683848934525
+conf_fit (121, 2, 28) float64 min 0.0019436779618263247 max 0.939024806022644
+uv_reader (121, 2, 28, 2) float32 min 65.50498 max 572.47327
+xiyi2 motion.npz 9014c08c12df513637514763e5a6de536d9c6fbe8f779c4355677c565133927a
+G (121, 4, 4) float32 min -0.20816395 max 1.0
+quat (121, 22, 4) float64 min -0.4439296809408347 max 1.0
+eul (121, 17, 3) float32 min -0.941659 max 0.9521532
+kp (121, 28, 3) float32 min -0.8720917 max 1.6679789
+fps () float64 min 24.0 max 24.0
+xiyi2_temporal_web reading.npz b968485accc4e226aee7bd9cb2fbffecf1cedebcfa21807f5d62728cb480cb36
+uv (121, 2, 28, 2) float32 min 65.50498 max 572.47327
+uv_raw (121, 2, 28, 2) float32 min 65.50498 max 572.47327
+conf (121, 2, 28) float32 min 0.18010667 max 0.9390248
+depth (121, 2, 28) float32 min -0.42062038 max 0.65263855
+X (121, 28, 3) float64 min -0.877071742587231 max 1.7003744233959883
+res (121, 28, 2) float64 min 0.0032016023174804083 max 50.54130066001335
+X_fit (121, 28, 3) float64 min -0.87816834200149 max 1.700768935431754
+conf_fit (121, 2, 28) float64 min 0.005706806468924963 max 0.9121286447209199
+uv_reader (121, 2, 28, 2) float32 min 65.50498 max 572.47327
+xiyi2_temporal_web motion.npz b78bcaebce9518e99492a9215d758490f22580381090dc259b33d13c6e9bcce2
+G (121, 4, 4) float32 min -0.20816404 max 1.0
+quat (121, 22, 4) float64 min -0.4161075256836015 max 1.0
+eul (121, 17, 3) float32 min -0.89962655 max 0.9285852
+kp (121, 28, 3) float32 min -0.8712608 max 1.6677914
+fps () float64 min 24.0 max 24.0
+xiyi2_temporal_web observation_weights.npz dc28f42598ab9821747d17bab75d1b4f69bf056eb195925d7eb9974223259e85
+uv_finite (121, 2, 28) bool min True max True
+in_frame (121, 2, 28) bool min True max True
+peak_raw (121, 2, 28) float64 min 0.18010666966438293 max 0.939024806022644
+peak_finite (121, 2, 28) bool min True max True
+peak_clipped (121, 2, 28) float64 min 0.18010666966438293 max 0.939024806022644
+bounds_factor (121, 2, 28) float64 min 1.0 max 1.0
+peak_factor (121, 2, 28) float64 min 0.2211013361811638 max 0.9420735657215118
+pixel_floor_px (2,) float64 min 1.9266551326067674 max 1.9266551326067674
+fps () float64 min 24.0 max 24.0
+temporal_radius_seconds () float64 min 0.125 max 0.125
+scale_radius_seconds () float64 min 0.5 max 0.5
+weight_floor () float64 min 0.001 max 0.001
+temporal_prediction_px (121, 2, 28, 2) float64 min 65.80876510410639 max 572.4552077832853
+temporal_supported (121, 2, 28) bool min True max True
+temporal_innovation_px (121, 2, 28, 2) float64 min -76.00069287891847 max 64.50087618991978
+temporal_common_innovation_px (121, 2, 2) float64 min -0.8068821474823267 max 0.9905725258231541
+temporal_relative_innovation_px (121, 2, 28, 2) float64 min -75.97878311826261 max 64.40634145488409
+temporal_center_px (121, 2, 28, 2) float64 min -1.3494998760860142 max 1.9580289310451349
+temporal_scale_px (121, 2, 28) float64 min 1.9266551326067674 max 31.734399508058
+temporal_distance_px (121, 2, 28) float64 min 0.0 max 85.86616872427966
+temporal_z (121, 2, 28) float64 min 0.0 max 18.90315157393095
+temporal_factor (121, 2, 28) float64 min 0.07298840217332048 max 1.0
+edge_indices (27, 2) int64 min 0 max 27
+edge_length_px (121, 2, 27) float64 min 0.011892187642443432 max 81.1221465891729
+edge_median_px (2, 27) float64 min 1.504998754346073 max 61.17697374487837
+edge_scale_px (2, 27) float64 min 3.8533102652135347 max 15.294243436219592
+edge_z (121, 2, 27) float64 min 0.0 max 20.140190269596353
+edge_factor (121, 2, 27) float64 min 0.27229296357692623 max 1.0
+bone_z (121, 2, 28) float64 min 0.0 max 20.140190269596353
+bone_scale_px (2, 28) float64 min 3.8533102652135347 max 15.294243436219592
+bone_factor (121, 2, 28) float64 min 0.27229296357692623 max 1.0
+ray_residual_px (121, 2, 28) float64 min 0.0032016023174804083 max 50.54130066001335
+ray_residual_finite (121, 2, 28) bool min True max True
+ray_shared_px (121, 28) float64 min 0.0036791066190444144 max 50.54130066001335
+ray_scale_px () float64 min 9.633275663033837 max 9.633275663033837
+ray_factor (121, 2, 28) float64 min 0.8070111205185033 max 0.9999999708279665
+ambiguity_factor (121, 2, 28) float64 min 0.4973977695167286 max 1.0
+ambiguity_ratio (121, 2, 28) float64 min 0.03393775224685669 max 1.0
+ambiguity_ratio_available (121, 2, 28) bool min True max True
+spread_factor (121, 2, 28) float64 min 0.4700926823427234 max 0.9999723726665655
+spread_scale_px (121, 2, 28) float64 min 3.8533102652135347 max 3.8533102652135347
+spread_px (121, 2, 28) float64 min 3.901726722717285 max 17.45588493347168
+spread_px_available (121, 2, 28) bool min True max True
+raw_product (121, 2, 28) float64 min 0.005706806468924963 max 0.9121286447209199
+weights (121, 2, 28) float64 min 0.005706806468924963 max 0.9121286447209199
+SOURCE_HASH solve_temporal.py 94cd41d20270dfd301bbe36b6be62743d674a279c82ac0c4db8df1ca0506c42d
+SOURCE_HASH observations.py 6829348bcb71cda0801cef73e507040e75fe4fc43d4713ce4aabcb7022b9eb9e
+SOURCE_HASH pipeline.py f5f0aae78ba1e7f4477421270a565721664ce701971698a4d66931437d480458
+SOURCE_HASH geom.py 6f6d5bfe1a0605d0892eea4ad1703b68d8c87712ba65f19c01372cc16cdb1d87
+SOURCE_HASH solve.py 771971172007bb5bbb03afda8606e40b5afe1a57e079270a4faf19cc89f5abee

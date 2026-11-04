@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>video2rig · 怪物动画工作台</title>
+<link rel="stylesheet" href="/static/app.css?v=run-pairing-2">
+<script type="importmap">
+{ "imports": { "three": "/static/vendor/three.module.js", "three/addons/": "/static/vendor/addons/" } }
+</script>
+</head>
+<body>
+<header>
+  <div class="brand">video2rig <span>怪物动画工作台</span></div>
+  <nav id="tabs">
+    <a data-tab="overview" class="active">总览</a>
+    <a data-tab="samples">训练图</a>
+    <a data-tab="train">训练</a>
+    <a data-tab="exam">考试</a>
+    <a data-tab="outputs">结果</a>
+    <a data-tab="run">运行</a>
+  </nav>
+  <div class="right">
+    <select id="projSel"></select>
+    <span id="sys" class="sys"></span>
+  </div>
+</header>
+
+<main>
+  <!-- ======================= overview ======================= -->
+  <section id="tab-overview" class="tab active">
+    <div id="projCards" class="cards"></div>
+    <div class="row">
+      <div class="panel grow">
+        <h3>参考图（给 Seedance 的首帧：正面 + 侧面）</h3>
+        <img id="refImg" class="ref" alt="">
+        <div class="hint"><a id="refDl" download>下载参考图</a></div>
+      </div>
+      <div class="panel" style="width:360px">
+        <h3>骨骼 / 关键点</h3>
+        <div id="rigInfo" class="kv"></div>
+        <div id="kpList" class="kplist"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= samples ======================= -->
+  <section id="tab-samples" class="tab">
+    <div class="toolbar">
+      <label>筛选 <select id="sFilter"><option value="all">全部</option><option value="fast">快速运动（模糊）</option><option value="slow">静止</option></select></label>
+      <button id="sPrev">上一页</button><span id="sPage"></span><button id="sNext">下一页</button>
+      <span class="hint">点击缩略图查看大图、关节标注和"像 Seedance 一样变差"后的训练输入</span>
+    </div>
+    <div class="row">
+      <div id="sGrid" class="grid grow"></div>
+      <div class="panel viewer" id="sViewer">
+        <div class="toolbar">
+          <label><input type="checkbox" id="sLabels" checked> 关节标注</label>
+          <label><input type="checkbox" id="sAug"> 训练增强</label>
+          <button id="sReroll">换一种增强</button>
+        </div>
+        <img id="sBig" alt="">
+        <div class="legend"><i class="dot l"></i>左 <i class="dot r"></i>右 <i class="dot m"></i>中线 · 空心=被遮挡</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= training ======================= -->
+  <section id="tab-train" class="tab">
+    <div class="row">
+      <div class="panel grow"><h3>训练损失（每 50 步）</h3><canvas id="cLoss" height="260"></canvas></div>
+      <div class="panel grow"><h3>验证集关节误差（像素，面板 640×720）</h3><canvas id="cVal" height="260"></canvas></div>
+    </div>
+    <div class="row">
+      <div class="panel grow"><h3>近/远腿深度顺序准确率</h3><canvas id="cDepth" height="200"></canvas></div>
+      <div class="panel grow"><h3>训练日志</h3><pre id="trainLog" class="log"></pre></div>
+    </div>
+  </section>
+
+  <!-- ======================= exam ======================= -->
+  <section id="tab-exam" class="tab">
+    <div id="examHead" class="cards"></div>
+    <div class="row">
+      <div class="panel grow">
+        <h3>考试录像：上 = 已知动作的视频 + 读到的关节；下 = 我们的模型 + 解出的动作</h3>
+        <video id="examVid" controls loop muted playsinline></video>
+      </div>
+      <div class="panel" style="width:420px">
+        <h3>逐骨骼方向误差（度，均值 / p90）</h3>
+        <div id="boneBars" class="bars"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= outputs ======================= -->
+  <section id="tab-outputs" class="tab">
+    <div class="row">
+      <div class="panel" style="width:320px">
+        <h3>动画结果</h3>
+        <div id="outList" class="list"></div>
+      </div>
+      <div class="panel grow">
+        <div class="toolbar"><b id="outTitle"></b><span id="outFiles"></span></div>
+        <div class="row">
+          <div class="grow"><video id="outVid" controls loop muted playsinline></video></div>
+          <div class="grow three-wrap">
+            <div id="three"></div>
+            <div class="toolbar">
+              <button id="tPlay">暂停</button>
+              <input type="range" id="tSeek" min="0" max="1000" value="0" class="grow">
+              <span id="tTime"></span>
+            </div>
+          </div>
+        </div>
+        <h3>两画面一致性（每帧射线偏差，占身体尺寸 %）</h3>
+        <canvas id="cCheck" height="140"></canvas>
+        <div id="outSummary" class="kv"></div>
+        <div class="toolbar" style="margin-top:14px">
+          <label>时域平滑 <select id="stableCutoff"><option value="1.5">慢动作 · 强（1.5Hz）</option><option value="2.5">普通 · 中（2.5Hz）</option><option value="4">快速动作 · 轻（4Hz）</option></select></label>
+          <button id="stableRun">生成稳定副本</button>
+          <span class="hint">保留原结果；只减少抖动，不保证脚锁地或修正识别错误。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= run ======================= -->
+  <section id="tab-run" class="tab">
+    <div class="row">
+      <div class="panel grow">
+        <div class="toolbar"><h2 style="margin:0">运行工作台</h2><button id="refreshInputs">刷新文件列表（保留选择）</button></div>
+        <div id="runStatus" class="run-notice" hidden></div>
+        <h3>A. 新模型 → 建项目与训练（已有项目生成动画请用下方 B）</h3>
+        <div class="form">
+          <label>模型（带骨骼的 FBX / GLB / .blend，贴图一起传）<input type="file" id="upModel" multiple></label>
+          <div id="upStatus" class="hint"></div>
+        </div>
+        <p class="hint">上传模型只会填入“新项目模型”，不会改变下方动画使用的识别器。流程：准备 → 训练图 → 训练 → 考试。</p>
+        <div class="form">
+          <label>项目名 <input id="newName" placeholder="例如 m11101"></label>
+          <label>模型 <select id="newModel"></select></label>
+          <label>朝向 <select id="newFacing"><option>-Y</option><option>+Y</option><option>-X</option><option>+X</option></select></label>
+          <label>头顶朝向 <select id="newUp" title="模型导入后头顶指向的轴；参考图里模型是躺着的就改这里"><option value="+Z">+Z（默认，已站立）</option><option>-Y</option><option>+Y</option><option>-X</option><option>+X</option><option>-Z</option></select></label>
+          <label>摄影棚 <select id="newProfile"><option value="legacy">旧版摄影棚（默认）</option><option value="soft-clean">实验：柔光无地影（尚无精度收益，需配套训练）</option></select></label>
+          <label><input type="checkbox" id="newProc"> 贴图缺失时用程序材质</label>
+          <button id="newRun" class="primary">开始</button>
+        </div>
+        <hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
+        <h3>B. 已训练项目 ＋ 对应视频 → 动画</h3>
+        <div class="form">
+          <label>目标项目 / 识别器 <select id="aniProject"></select></label>
+          <label>上传新视频 <input type="file" id="upVideo" accept="video/*"></label>
+          <label>所选视频 <select id="aniVideo"></select></label>
+          <div class="toolbar"><span id="videoBinding" class="hint"></span><button id="bindVideo">将此视频关联到所选项目</button></div>
+          <div id="pairWarning" class="run-notice"></div>
+          <label id="mismatchWrap" hidden><input type="checkbox" id="aniMismatch"> 我确认有意跨项目测试此视频（不是模型自动匹配）</label>
+          <div class="run-previews">
+            <figure><figcaption>项目参考图 · 必须与生成视频所用首帧对应</figcaption><img id="runReference" alt="项目参考图"><p id="runProjectMeta" class="hint"></p></figure>
+            <figure><figcaption>所选视频 · 首帧 / 播放预览</figcaption><video id="runVideo" controls muted playsinline preload="metadata"></video><p id="runVideoMeta" class="hint"></p></figure>
+          </div>
+          <label>名称 <input id="aniName" placeholder="默认用文件名"></label>
+          <label>求解模式 <select id="aniSolver"><option value="legacy">旧版（默认）</option><option value="temporal">实验：可信度融合＋联合时序（无自动锁脚）</option></select></label>
+          <label><input type="checkbox" id="aniSwap"> 左侧是侧面</label>
+          <label><input type="checkbox" id="aniForce"> 两画面不一致也继续</label>
+          <div id="pairSummary" class="run-notice"></div>
+          <button id="aniRun" class="primary" disabled>确认项目和视频后生成动画</button>
+        </div>
+        <h3 id="stepProject">单步操作：先选择目标项目</h3>
+        <div class="form inline">
+          <button data-step="gen">重新生成训练图</button>
+          <button data-step="train">重新训练</button>
+          <button data-step="exam">重新考试</button>
+        </div>
+      </div>
+      <div class="panel grow">
+        <h3>任务</h3>
+        <div id="jobList" class="list"></div>
+        <pre id="jobLog" class="log tall"></pre>
+      </div>
+    </div>
+  </section>
+</main>
+<script type="module" src="/static/app.js?v=limb-metric-1"></script>
+</body>
+</html>
