@@ -22,27 +22,37 @@ Seedance two-view video               ── v2r animate ─▶ out/<clip>/<clip
 
 | Page | Contents |
 |---|---|
-| 总览 (Overview) | Status cards for every project, the two-view reference picture (downloadable, for Seedance), and the skeleton/keypoint list (left/right/mirror pairs, bones folded into their parent) |
-| 训练图 (Training images) | Browse the 3000 random poses by page. Filter for motion-blurred samples. Toggle the joint labels and the training-time "Seedance-like" augmentation. Use ←/→ to step through samples. |
-| 训练 (Training) | Loss curves, validation joint error (median / visible / p90), and near-far depth-order accuracy. Refreshes live while training runs. |
-| 考试 (Exam) | Pass/fail, joint position error, bone-direction error per bone, and the exam recording (top: video + joints read, bottom: our model + solved motion) |
-| 结果 (Results) | Every animation output: comparison video, **3D animation preview (three.js, rotate/scrub)**, per-frame two-view consistency curve, and FBX/GLB/BVH/.blend downloads |
-| 运行 (Run) | Upload a model or video. Run the full pipeline for a new monster (prepare → gen → train → exam) or "video → animation", plus single steps. Jobs are queued one at a time with live logs and a cancel button. |
+| 项目概览 | Current character, readiness, next action, preparation stages, recent results, downloadable two-view reference; rig details are collapsed. |
+| 生成动画 | Current project is the sole target. Upload/select a video, compare reference and preview, explicitly acknowledge unbound or cross-project inputs; advanced/diagnostic options are collapsed and never silently remembered. |
+| 动画结果 | Search/filter results, bounded equal-height video/3D comparison, unified exact-second timeline, frame stepping/speed, FBX-first grouped exports, anomaly jumps, collapsed technical diagnostics and stable-copy form. Duration mismatches are explicitly labeled; no time normalization. |
+| 训练情况 | Conclusion, current-project task, training curves, guarded single-step operations, collapsed technical logs. |
+| 训练数据 | Paged native-button thumbnails, blur filter, labels/augmentation, ←/→ stepping within the current page. |
+| 验证报告 | Conclusion and next action, key metrics, bounded recording, per-bone error detail; automatic pass is not animation-quality acceptance. |
 
-Run page pairing (2026-11-03):
+**新建角色** is an independent dialog; the existing full prepare → data → train → exam pipeline is retained. This first release does not claim pre-prepare model preview. **任务中心** is a global dialog with current/all-project scope, clear project ownership, logs, cancellation and result navigation. Browsing or refreshing does not cancel server jobs.
 
-- A is **new model → create/train project**. Uploading/selecting its model does not replace the
-  trained reader used in B. Existing prepared/trained projects cannot be silently reused for
-  a different model; choose a new project name (empty failed projects may be retried).
-- B explicitly selects **target project/reader + source video**. Project options show their
-  bound model, lighting profile and trained status. Reference picture and video first-frame /
-  playback preview are displayed together, and the exact pairing is confirmed before submission.
+Web UI V1 regression commands (Node.js, no packages/network/GPU jobs):
+
+```bash
+node tools/test_run_page.cjs
+node video2rig/tools/test_results.cjs
+node video2rig/tools/test_workspace_routes.cjs
+```
+
+Static-only release packaging: `python video2rig/tools/package_web_ui.py`. This produces a content-addressed directory and manifest under `work/web-ui-v1/`; it never publishes algorithms. `tools/activate_web_ui.py` verifies a staged release and atomically replaces only the HTML entry when passed `--activate --expected-entry-sha256 <observed-current-entry-hash>`. It never restarts the job-owning Web service or retains a legacy entry. Only the active release is deployed; old entry backups, legacy root JS/CSS and intermediate preview releases have been removed. Shared Three vendor assets remain in place.
+
+Project/video pairing:
+
+- **新建角色** creates and trains a separate project. Existing prepared/trained projects cannot
+  be silently reused for a different model; choose a new project name (empty failed projects may be retried).
+- **生成动画** always uses the current project from the header. Reference and video previews
+  are displayed together; unbound input requires explicit acknowledgement, mismatches require diagnostic confirmation.
 - Refreshing the file list/tab preserves selection; successful uploads are selected automatically,
-  failures are reported separately. Drafts persist in localStorage. Header/project selectors sync.
+  failures are reported separately. Drafts persist per project in localStorage; force/matching confirmations do not.
 - Videos can be manually associated via POST `/api/video-binding`, saved atomically in
   `/data/video2rig/video_bindings.json`. This is a user declaration, not automatic matching.
   A declared mismatch requires explicit confirmation, enforced server-side as well as in the UI.
-  Unbound videos remain allowed with a warning; no trained `best.pt` means animation is blocked.
+  Unbound videos require acknowledgement in the UI; no trained `best.pt` means animation is blocked.
 - `/api/videos/{name}/file` supports playback/range requests, `/thumbnail.jpg` serves its first frame.
 - Tests: `tools/test_run_binding.py` (repository root) or deployed `code/tools/test_run_binding.py`.
   Twelve dry API tests cover bindings, paths, prerequisites and reuse guards; browser tests used

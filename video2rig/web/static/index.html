@@ -3,184 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>video2rig · 怪物动画工作台</title>
-<link rel="stylesheet" href="/static/app.css?v=run-pairing-2">
+<meta name="color-scheme" content="dark">
+<title>video2rig · 角色动画工作台</title>
+<link rel="stylesheet" href="/static/app.css?v=workspace-v1">
 <script type="importmap">
 { "imports": { "three": "/static/vendor/three.module.js", "three/addons/": "/static/vendor/addons/" } }
 </script>
 </head>
 <body>
-<header>
-  <div class="brand">video2rig <span>怪物动画工作台</span></div>
-  <nav id="tabs">
-    <a data-tab="overview" class="active">总览</a>
-    <a data-tab="samples">训练图</a>
-    <a data-tab="train">训练</a>
-    <a data-tab="exam">考试</a>
-    <a data-tab="outputs">结果</a>
-    <a data-tab="run">运行</a>
-  </nav>
-  <div class="right">
-    <select id="projSel"></select>
-    <span id="sys" class="sys"></span>
-  </div>
+<a class="skip-link" href="#workspace">跳到工作区</a>
+<header class="app-header">
+  <a class="brand" href="#/overview"><span class="brand-mark" aria-hidden="true">v2r</span><span>video2rig<small>角色动画工作台</small></span></a>
+  <div class="project-switch"><label for="projSel">当前项目</label><select id="projSel" aria-label="切换当前角色项目"></select><span id="projectStatus" class="badge"></span></div>
+  <div class="header-actions"><button id="openCreate">＋ 新建角色</button><button id="openTasks">任务 <span id="taskCount" class="count">0</span></button><details class="system-menu"><summary>系统状态</summary><div id="sys" class="hint">正在读取资源状态…</div></details></div>
 </header>
-
-<main>
-  <!-- ======================= overview ======================= -->
-  <section id="tab-overview" class="tab active">
-    <div id="projCards" class="cards"></div>
-    <div class="row">
-      <div class="panel grow">
-        <h3>参考图（给 Seedance 的首帧：正面 + 侧面）</h3>
-        <img id="refImg" class="ref" alt="">
-        <div class="hint"><a id="refDl" download>下载参考图</a></div>
-      </div>
-      <div class="panel" style="width:360px">
-        <h3>骨骼 / 关键点</h3>
-        <div id="rigInfo" class="kv"></div>
-        <div id="kpList" class="kplist"></div>
-      </div>
-    </div>
+<div class="app-shell">
+<aside class="sidebar">
+  <div class="nav-caption">项目工作区</div>
+  <nav id="tabs" aria-label="项目导航">
+    <button data-tab="overview" class="active"><span aria-hidden="true">◫</span>项目概览</button>
+    <button data-tab="run"><span aria-hidden="true">▷</span>生成动画</button>
+    <button data-tab="outputs"><span aria-hidden="true">▤</span>动画结果 <span id="outputCount" class="count">0</span></button>
+    <div class="nav-divider"></div><div class="nav-caption">训练与验证</div>
+    <button data-tab="train"><span aria-hidden="true">↗</span>训练情况</button>
+    <button data-tab="samples"><span aria-hidden="true">▦</span>训练数据</button>
+    <button data-tab="exam"><span aria-hidden="true">✓</span>验证报告</button>
+  </nav>
+  <div class="sidebar-note">从角色到动作<br><span>准备一次，持续创作。</span></div>
+</aside>
+<main id="workspace" tabindex="-1">
+  <div class="page-heading"><div><div id="pageEyebrow" class="eyebrow">角色工作区</div><h1 id="pageTitle">项目概览</h1><p id="pageDescription" class="hint"></p></div><span id="contextName" class="context-label"></span></div>
+  <div id="pageError" class="run-notice error" role="alert" hidden></div>
+  <div id="notification" class="run-notice" role="status" aria-live="polite" hidden></div>
+  <section id="tab-overview" class="tab active" aria-label="项目概览"><div id="overviewContent"></div></section>
+  <section id="tab-run" class="tab" aria-label="生成动画"><div id="generateContent"></div></section>
+  <section id="tab-outputs" class="tab" aria-label="动画结果"><div id="outputsContent"></div></section>
+  <section id="tab-train" class="tab" aria-label="训练情况">
+    <div id="trainConclusion"></div><div id="projectTask" class="project-task" aria-live="polite"></div>
+    <div class="toolbar maintenance"><button data-step="train" class="primary">开始训练</button><button data-step="gen">生成训练数据</button><button data-step="exam">运行验证</button><button data-nav="samples" class="text-button">查看训练数据 →</button></div>
+    <div class="chart-grid"><div class="panel"><h3>训练损失</h3><canvas id="cLoss" data-height="220" height="220" aria-label="训练损失曲线"></canvas></div><div class="panel"><h3>验证集关节误差 · 像素</h3><canvas id="cVal" data-height="220" height="220" aria-label="验证集误差曲线"></canvas></div></div>
+    <details class="panel advanced"><summary>技术详情 · 深度顺序与训练日志</summary><div class="chart-grid"><div><h3>近 / 远腿深度顺序准确率</h3><canvas id="cDepth" data-height="200" height="200"></canvas></div><div><h3>训练日志</h3><pre id="trainLog" class="log" tabindex="0">暂无日志</pre></div></div></details>
   </section>
-
-  <!-- ======================= samples ======================= -->
-  <section id="tab-samples" class="tab">
-    <div class="toolbar">
-      <label>筛选 <select id="sFilter"><option value="all">全部</option><option value="fast">快速运动（模糊）</option><option value="slow">静止</option></select></label>
-      <button id="sPrev">上一页</button><span id="sPage"></span><button id="sNext">下一页</button>
-      <span class="hint">点击缩略图查看大图、关节标注和"像 Seedance 一样变差"后的训练输入</span>
-    </div>
-    <div class="row">
-      <div id="sGrid" class="grid grow"></div>
-      <div class="panel viewer" id="sViewer">
-        <div class="toolbar">
-          <label><input type="checkbox" id="sLabels" checked> 关节标注</label>
-          <label><input type="checkbox" id="sAug"> 训练增强</label>
-          <button id="sReroll">换一种增强</button>
-        </div>
-        <img id="sBig" alt="">
-        <div class="legend"><i class="dot l"></i>左 <i class="dot r"></i>右 <i class="dot m"></i>中线 · 空心=被遮挡</div>
-      </div>
-    </div>
+  <section id="tab-samples" class="tab" aria-label="训练数据">
+    <div class="toolbar"><label for="sFilter">筛选</label><select id="sFilter"><option value="all">全部姿势</option><option value="fast">快速运动 · 模糊</option><option value="slow">静止姿势</option></select><button id="sPrev">上一页</button><span id="sPage" class="hint"></span><button id="sNext">下一页</button><span class="hint">选择缩略图查看标注；← / → 切换本页样本</span></div>
+    <div class="samples-layout"><div id="sGrid" class="grid"></div><div class="panel viewer" id="sViewer"><div class="toolbar"><label><input type="checkbox" id="sLabels" checked> 关节标注</label><label><input type="checkbox" id="sAug"> 训练增强</label><button id="sReroll">更换增强</button></div><img id="sBig" alt="当前训练样本的双视角关节标注" hidden><div class="legend"><i class="dot l"></i>左 <i class="dot r"></i>右 <i class="dot m"></i>中线 · 空心表示遮挡</div><p class="hint">训练增强模拟模糊等输入变化，不修改原始训练图片。</p></div></div>
   </section>
-
-  <!-- ======================= training ======================= -->
-  <section id="tab-train" class="tab">
-    <div class="row">
-      <div class="panel grow"><h3>训练损失（每 50 步）</h3><canvas id="cLoss" height="260"></canvas></div>
-      <div class="panel grow"><h3>验证集关节误差（像素，面板 640×720）</h3><canvas id="cVal" height="260"></canvas></div>
-    </div>
-    <div class="row">
-      <div class="panel grow"><h3>近/远腿深度顺序准确率</h3><canvas id="cDepth" height="200"></canvas></div>
-      <div class="panel grow"><h3>训练日志</h3><pre id="trainLog" class="log"></pre></div>
-    </div>
-  </section>
-
-  <!-- ======================= exam ======================= -->
-  <section id="tab-exam" class="tab">
-    <div id="examHead" class="cards"></div>
-    <div class="row">
-      <div class="panel grow">
-        <h3>考试录像：上 = 已知动作的视频 + 读到的关节；下 = 我们的模型 + 解出的动作</h3>
-        <video id="examVid" controls loop muted playsinline></video>
-      </div>
-      <div class="panel" style="width:420px">
-        <h3>逐骨骼方向误差（度，均值 / p90）</h3>
-        <div id="boneBars" class="bars"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ======================= outputs ======================= -->
-  <section id="tab-outputs" class="tab">
-    <div class="row">
-      <div class="panel" style="width:320px">
-        <h3>动画结果</h3>
-        <div id="outList" class="list"></div>
-      </div>
-      <div class="panel grow">
-        <div class="toolbar"><b id="outTitle"></b><span id="outFiles"></span></div>
-        <div class="row">
-          <div class="grow"><video id="outVid" controls loop muted playsinline></video></div>
-          <div class="grow three-wrap">
-            <div id="three"></div>
-            <div class="toolbar">
-              <button id="tPlay">暂停</button>
-              <input type="range" id="tSeek" min="0" max="1000" value="0" class="grow">
-              <span id="tTime"></span>
-            </div>
-          </div>
-        </div>
-        <h3>两画面一致性（每帧射线偏差，占身体尺寸 %）</h3>
-        <canvas id="cCheck" height="140"></canvas>
-        <div id="outSummary" class="kv"></div>
-        <div class="toolbar" style="margin-top:14px">
-          <label>时域平滑 <select id="stableCutoff"><option value="1.5">慢动作 · 强（1.5Hz）</option><option value="2.5">普通 · 中（2.5Hz）</option><option value="4">快速动作 · 轻（4Hz）</option></select></label>
-          <button id="stableRun">生成稳定副本</button>
-          <span class="hint">保留原结果；只减少抖动，不保证脚锁地或修正识别错误。</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ======================= run ======================= -->
-  <section id="tab-run" class="tab">
-    <div class="row">
-      <div class="panel grow">
-        <div class="toolbar"><h2 style="margin:0">运行工作台</h2><button id="refreshInputs">刷新文件列表（保留选择）</button></div>
-        <div id="runStatus" class="run-notice" hidden></div>
-        <h3>A. 新模型 → 建项目与训练（已有项目生成动画请用下方 B）</h3>
-        <div class="form">
-          <label>模型（带骨骼的 FBX / GLB / .blend，贴图一起传）<input type="file" id="upModel" multiple></label>
-          <div id="upStatus" class="hint"></div>
-        </div>
-        <p class="hint">上传模型只会填入“新项目模型”，不会改变下方动画使用的识别器。流程：准备 → 训练图 → 训练 → 考试。</p>
-        <div class="form">
-          <label>项目名 <input id="newName" placeholder="例如 m11101"></label>
-          <label>模型 <select id="newModel"></select></label>
-          <label>朝向 <select id="newFacing"><option>-Y</option><option>+Y</option><option>-X</option><option>+X</option></select></label>
-          <label>头顶朝向 <select id="newUp" title="模型导入后头顶指向的轴；参考图里模型是躺着的就改这里"><option value="+Z">+Z（默认，已站立）</option><option>-Y</option><option>+Y</option><option>-X</option><option>+X</option><option>-Z</option></select></label>
-          <label>摄影棚 <select id="newProfile"><option value="legacy">旧版摄影棚（默认）</option><option value="soft-clean">实验：柔光无地影（尚无精度收益，需配套训练）</option></select></label>
-          <label><input type="checkbox" id="newProc"> 贴图缺失时用程序材质</label>
-          <label title="挂在独立根骨骼上的道具（如 m11101 的枪）不渲染、不设关键点、不导出；骨骼不变"><input type="checkbox" id="newDropProps" checked> 移除独立道具（枪等）</label>
-          <button id="newRun" class="primary">开始</button>
-        </div>
-        <hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
-        <h3>B. 已训练项目 ＋ 对应视频 → 动画</h3>
-        <div class="form">
-          <label>目标项目 / 识别器 <select id="aniProject"></select></label>
-          <label>上传新视频 <input type="file" id="upVideo" accept="video/*"></label>
-          <label>所选视频 <select id="aniVideo"></select></label>
-          <div class="toolbar"><span id="videoBinding" class="hint"></span><button id="bindVideo">将此视频关联到所选项目</button></div>
-          <div id="pairWarning" class="run-notice"></div>
-          <label id="mismatchWrap" hidden><input type="checkbox" id="aniMismatch"> 我确认有意跨项目测试此视频（不是模型自动匹配）</label>
-          <div class="run-previews">
-            <figure><figcaption>项目参考图 · 必须与生成视频所用首帧对应</figcaption><img id="runReference" alt="项目参考图"><p id="runProjectMeta" class="hint"></p></figure>
-            <figure><figcaption>所选视频 · 首帧 / 播放预览</figcaption><video id="runVideo" controls muted playsinline preload="metadata"></video><p id="runVideoMeta" class="hint"></p></figure>
-          </div>
-          <label>名称 <input id="aniName" placeholder="默认用文件名"></label>
-          <label>求解模式 <select id="aniSolver"><option value="legacy">旧版（默认）</option><option value="temporal">实验：可信度融合＋联合时序（无自动锁脚）</option></select></label>
-          <label><input type="checkbox" id="aniSwap"> 左侧是侧面</label>
-          <label><input type="checkbox" id="aniForce"> 两画面不一致也继续</label>
-          <div id="pairSummary" class="run-notice"></div>
-          <button id="aniRun" class="primary" disabled>确认项目和视频后生成动画</button>
-        </div>
-        <h3 id="stepProject">单步操作：先选择目标项目</h3>
-        <div class="form inline">
-          <button data-step="gen">重新生成训练图</button>
-          <button data-step="train">重新训练</button>
-          <button data-step="exam">重新考试</button>
-        </div>
-      </div>
-      <div class="panel grow">
-        <h3>任务</h3>
-        <div id="jobList" class="list"></div>
-        <pre id="jobLog" class="log tall"></pre>
-      </div>
-    </div>
-  </section>
+  <section id="tab-exam" class="tab" aria-label="验证报告"><div id="examConclusion"></div><div id="examHead" class="metrics-grid"></div><div class="exam-layout"><div class="panel"><h3>验证录像 · 上方为输入与识别，下方为模型与求解动作</h3><video id="examVid" controls loop muted playsinline preload="metadata" hidden></video><div id="examVideoEmpty" class="empty-state">暂无验证录像</div></div><details class="panel advanced" open><summary>逐骨骼方向误差</summary><p class="hint">实色：均值 / 浅色：p90；单位：度</p><div id="boneBars" class="bars"></div></details></div></section>
 </main>
-<script type="module" src="/static/app.js?v=drop-props-1"></script>
+</div>
+<dialog id="createDialog" class="create-dialog" aria-labelledby="createHeading"><div id="createContent"></div></dialog>
+<dialog id="tasksDialog" class="tasks-dialog" aria-labelledby="tasksTitle"><div class="dialog-header"><div><div class="eyebrow">持续执行，无需停留此页</div><h2 id="tasksTitle">任务中心</h2></div><button id="closeTasks" aria-label="关闭任务中心">✕</button></div><div class="toolbar"><label for="jobScope">任务范围</label><select id="jobScope"><option value="current">当前项目</option><option value="all">全部项目</option></select><button id="refreshJobs">刷新</button></div><div id="jobError" class="run-notice error" role="alert" hidden></div><div class="tasks-layout"><div id="jobList" class="list"></div><div id="jobDetail" class="job-detail"></div></div></dialog>
+<dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmTitle"><form method="dialog"><h2 id="confirmTitle">确认操作</h2><p id="confirmText"></p><div class="toolbar"><button value="cancel">取消</button><button id="confirmAction" class="primary" value="ok">确认执行</button></div></form></dialog>
+<script type="module" src="/static/app.js?v=workspace-v1"></script>
 </body>
 </html>
