@@ -31,13 +31,27 @@ Seedance two-view video               ── v2r animate ─▶ out/<clip>/<clip
 
 **新建角色** is an independent dialog; the existing full prepare → data → train → exam pipeline is retained. This first release does not claim pre-prepare model preview. **任务中心** is a global dialog with current/all-project scope, clear project ownership, logs, cancellation and result navigation. Browsing or refreshing does not cancel server jobs.
 
-Web UI V1 regression commands (Node.js, no packages/network/GPU jobs):
+Web UI regression commands (Node.js, no packages/network/GPU jobs):
 
 ```bash
 node tools/test_run_page.cjs
 node video2rig/tools/test_results.cjs
 node video2rig/tools/test_workspace_routes.cjs
+node video2rig/tools/test_task_ui.cjs
 ```
+
+### Batch 2: observed tasks, real progress, safe recovery
+
+- `/api/tasks` merges Web queue records with **read-only** Linux `/proc` observations of supported CLI commands under the known code/project roots. PID + start ticks identify processes; fork/DataLoader workers and managed descendants are deduplicated. It never adopts/signals external tasks. External disappearance is `ended_unknown`, not success; scan failure remains unknown with a warning.
+- Phases and counters come only from live child commands or fresh bounded logs. An explicit step `x/y` is phase progress, not a fabricated full-pipeline percentage. No ETA is guessed. External history is in memory (one hour), not a complete process accounting service.
+- Generation shows a stable current-project task card and explicit result/diagnostic actions. Failed Web animation tasks can **load inputs for review**, not replay automatically; confirmations/force/overwrite are reset and a noncolliding `*_retry` name is chosen. Existing output directories require explicit legacy overwrite consent on the server; temporal collisions are rejected.
+- Project summaries cache metadata counts and incrementally read JSONL. A short snapshot TTL preserves updates; startup warms the expensive first parse. Switching cached projects no longer repeats a full project-list request.
+- Task creation blocks observed same-project conflicts; the worker waits while external CLI computation is observed. This cannot prevent a separately launched CLI process from racing a later job, so operators must not launch conflicting writes concurrently.
+- `V2R_DISABLE_WORKER=1` is for isolated test/preview processes only. Never use it on production to pretend jobs execute.
+
+Stdlib backend tests: `python video2rig/tools/test_project_store.py`, `python video2rig/tools/test_task_monitor.py`. Existing server environment tests (worker mocked/disabled; temporary files only): `python tools/test_run_binding.py`, `python video2rig/tools/test_web_tasks.py`.
+
+`tools/deploy_web_batch.py` verifies exact current entry/backend hashes, requires an empty Web queue and complete idle CLI observation twice, then updates only the three Web Python modules and immutable HTML entry and restarts the Web service. It retains operational rollback files **outside** the public static root; no alternate legacy UI entry is exposed. It never syncs algorithm edits or restores task/model data.
 
 Static-only release packaging: `python video2rig/tools/package_web_ui.py`. This produces a content-addressed directory and manifest under `work/web-ui-v1/`; it never publishes algorithms. `tools/activate_web_ui.py` verifies a staged release and atomically replaces only the HTML entry when passed `--activate --expected-entry-sha256 <observed-current-entry-hash>`. It never restarts the job-owning Web service or retains a legacy entry. Only the active release is deployed; old entry backups, legacy root JS/CSS and intermediate preview releases have been removed. Shared Three vendor assets remain in place.
 

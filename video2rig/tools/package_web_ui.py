@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 repo = Path(__file__).resolve().parents[2]
 source = repo / 'video2rig' / 'web' / 'static'
-names = ['index.html', 'app.css', 'app.js', 'run-page.js', 'results.js']
+names = ['index.html', 'app.css', 'app.js', 'run-page.js', 'results.js', 'task-ui.js']
 contents = {n: (source / n).read_bytes() for n in names}
 digest = hashlib.sha256(b''.join(contents[n] for n in names)).hexdigest()[:12]
 release = f'ui-v1-{digest}'

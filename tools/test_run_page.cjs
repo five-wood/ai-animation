@@ -20,11 +20,14 @@ function deferred() {
 }
 class Element {
   constructor(id = '', tag = 'DIV') {
-    Object.assign(this, {id, tagName:tag, checked:false, hidden:false, disabled:false, attrs:{}, handlers:{}, children:[], textContent:'', className:'', files:[], open:false, _value:'', focused:false});
+    Object.assign(this, {id, tagName:tag, checked:false, hidden:false, disabled:false, attrs:{}, handlers:{}, children:[], _textContent:'', textWrites:0, className:'', files:[], open:false, _value:'', focused:false});
   }
+  set textContent(value) { this._textContent = String(value); this.textWrites++; }
+  get textContent() { return this._textContent; }
   set value(value) {
     const text = String(value);
     this._value = this.tagName === 'SELECT' && !this.children.some(option => option.value === text) ? '' : text;
+    if (this.tagName === 'PROGRESS') this.attrs.value = text;
     if (this.type === 'file' && !text) this.files = [];
   }
   get value() { return this._value; }
@@ -71,7 +74,7 @@ function harness({initial = 'A', storage = {}} = {}) {
   const events = [];
   dialog.showModal = () => { dialog.open = true; events.push('open'); };
   dialog.close = () => { dialog.open = false; events.push('close'); };
-  const requests = [], submissions = [], navigations = [], notifications = [], confirmations = [], uploads = [];
+  const requests = [], submissions = [], navigations = [], notifications = [], confirmations = [], uploads = [], openedResults = [];
   const localData = {...storage};
   let current = initial, apiHook = null, submitHook = null, selectHook = null, navigateHook = null;
   const projects = [
@@ -130,12 +133,13 @@ function harness({initial = 'A', storage = {}} = {}) {
     },
     navigate:async tab => { events.push('navigate:' + tab); navigations.push(tab); if (navigateHook) await navigateHook(tab); },
     notify:(text,type) => notifications.push({text,type}),
+    openResult:async(project,name) => { openedResults.push({project,name}); },
   });
   const $ = id => run.nodes[id] || create.nodes[id];
   async function choose(id, value, type = 'change') { $(id).value = value; await $(id).fire(type); }
   return {
     page, $, choose, run, create, dialog, projects, listing, localData, requests, submissions,
-    navigations, notifications, confirmations, uploads, events,
+    navigations, notifications, confirmations, uploads, events, openedResults,
     get current(){ return current; },
     switchProject(name){ current = name; page.syncProject(name); },
     setApiHook(fn){ apiHook = fn; }, setSubmitHook(fn){ submitHook = fn; },
@@ -157,8 +161,10 @@ test('accessible dialog and matching gates; same-project binding avoids routine 
   assert.equal(h.submissions.at(-1).args.swap, true);
   assert.equal(h.submissions.at(-1).args.confirm_mismatch, false);
   assert.equal(h.requests.some(request => request.url === '/api/video-binding'), false);
+  h.page.onTasks([{id:'job-1',project:'A',cmd:'animate',args:h.submissions[0].args,status:'done'}]);
   await h.choose('aniVideo', 'a.mp4'); assert.equal(h.$('aniRun').disabled, false);
   await h.$('generateForm').fire('submit'); assert.equal(h.confirmations.length, 0);
+  h.page.onTasks([{id:'job-2',project:'A',cmd:'animate',args:h.submissions[1].args,status:'done'}]);
   await h.choose('aniVideo', 'b.mp4'); assert.equal(h.$('aniRun').disabled, true);
   assert.equal(h.$('runAdvanced').open, true);
   h.$('aniMismatch').checked = true; await h.$('aniMismatch').fire('change');
@@ -300,6 +306,211 @@ test('dynamic project URL segments are encoded and server strings stay text-only
   assert.equal(h.requests.some(request => request.url === '/api/projects/role%20%231'), true);
   assert.match(h.$('runReference').src, /role%20%231/);
   assert.equal(h.$('runProjectMeta').textContent.includes('<img onerror=bad>'), true);
+});
+
+const generationTask = (patch = {}) => ({id:'task-1', project:'A', cmd:'animate', source:'web', read_only:false, can_cancel:true, status:'running', created:10, args:{video:'/srv/videos/a.mp4',name:'walk',solver:'legacy',swap:false}, ...patch});
+
+test('accepted generation immediately creates a stable scoped task card and blocks duplicate work', async () => {
+  const h = harness(); await h.page.refresh(); await h.choose('aniVideo', 'a.mp4');
+  assert.equal(h.$('generationTaskCard').hidden, true);
+  await h.$('generateForm').fire('submit');
+  const card = h.$('generationTaskCard');
+  assert.equal(card.hidden, false); assert.match(h.$('generationTaskStatus').textContent, /排队/);
+  assert.match(h.$('generationTaskMeta').textContent, /项目：A.*a\.mp4.*输出：a/);
+  assert.equal(h.$('aniRun').disabled, true);
+  await h.$('generateForm').fire('submit'); assert.equal(h.submissions.length, 1);
+  h.page.onTasks([]); assert.equal(h.$('generationTaskCard'), card); assert.equal(card.hidden, false);
+  assert.equal(h.$('aniRun').disabled, true, 'an accepted task cannot disappear during a racing poll');
+  h.switchProject('B'); await h.choose('aniVideo', 'b.mp4');
+  assert.equal(card.hidden, true); assert.equal(h.$('aniRun').disabled, false);
+  h.switchProject('A'); assert.equal(card.hidden, false); assert.equal(h.current, 'A');
+  assert.equal(h.navigations.length, 0, 'acceptance and polling must not switch views');
+});
+
+test('accepted task records preserve server normalization and cannot switch a project chosen while submitting', async () => {
+  const h = harness(); await h.page.refresh(); await h.choose('aniVideo', 'a.mp4'); await h.choose('aniSolver', 'temporal');
+  const waiting = deferred(); h.setSubmitHook(() => waiting.promise);
+  const pending = h.$('generateForm').fire('submit'); await tick(); h.switchProject('B');
+  waiting.resolve({id:'normalized',status:'queued',args:{video:'/srv/a.mp4',name:'a_temporal'}}); await pending;
+  assert.equal(h.current, 'B'); assert.equal(h.$('generationTaskCard').hidden, true); assert.equal(h.$('runStatus').hidden, true);
+  h.switchProject('A'); assert.match(h.$('generationTaskMeta').textContent, /输出：a_temporal/);
+  h.page.onTasks([generationTask({id:'normalized',status:'done',args:{video:'/srv/a.mp4',name:'a_temporal',solver:'temporal'}})]);
+  await h.$('generationTaskResult').fire('click'); assert.deepEqual(h.openedResults.at(-1), {project:'A',name:'a_temporal'});
+  assert.equal(h.navigations.length, 0);
+});
+
+test('task phase uses real counters only and unchanged polls do not rewrite live regions', async () => {
+  const h = harness(); await h.page.refresh(); await h.choose('aniVideo', 'a.mp4');
+  const card = h.$('generationTaskCard');
+  const task = generationTask({phase:{key:'solve',label:'求解骨骼',current:25,total:100,unit:'帧',percent:97}});
+  h.page.onTasks([task]);
+  assert.equal(h.$('generationTaskPhase').textContent, '求解骨骼 · 25 / 100 帧');
+  assert.equal(h.$('generationTaskProgress').hidden, false); assert.equal(h.$('generationTaskProgress').value, '25');
+  assert.equal(card.getAttribute('aria-live'), null); assert.equal(card.getAttribute('role'), null);
+  const live = h.$('generationTaskAnnouncement'), reason = h.$('runDisabledReason'), pair = h.$('pairWarning');
+  const counts = [live.textWrites,reason.textWrites,pair.textWrites];
+  h.page.onTasks([clone(task)]);
+  assert.deepEqual([live.textWrites,reason.textWrites,pair.textWrites], counts);
+  h.page.onTasks([{...task,phase:{key:'solve',label:'求解骨骼',percent:55}}]);
+  assert.equal(h.$('generationTaskPhase').textContent, '求解骨骼'); assert.equal(h.$('generationTaskProgress').hidden, true);
+  assert.equal(h.$('generationTaskProgress').hasAttribute('value'), false);
+  for (const phase of [{current:1,total:0},{current:101,total:100},{current:-1,total:100},{current:'5',total:10},{current:NaN,total:10}]) {
+    h.page.onTasks([{...task,phase:{label:'无可信计数',...phase}}]); assert.equal(h.$('generationTaskProgress').hidden, true);
+  }
+  h.page.onTasks([{...task,status:'done',phase:null}]);
+  assert.match(live.textContent, /执行完成/); const completedWrites = live.textWrites;
+  h.page.onTasks([{...task,status:'done',phase:null}]); assert.equal(live.textWrites, completedWrites);
+  assert.equal(h.$('generationTaskCard'), card, 'polling must retain the exact card DOM node');
+});
+
+test('completion and review open the exact result, not an automatic navigation', async () => {
+  const h = harness(); await h.page.refresh();
+  const task = generationTask(); h.page.onTasks([task]); h.page.onTasks([{...task,status:'done'}]);
+  assert.equal(h.$('generationTaskResult').hidden, false); assert.equal(h.$('generationTaskResult').textContent, '查看结果');
+  assert.equal(h.openedResults.length, 0); await h.$('generationTaskResult').fire('click');
+  assert.deepEqual(h.openedResults.at(-1), {project:'A',name:'walk'});
+  const review = generationTask({id:'review',status:'needs_review',created:11,result_name:'diagnostic'});
+  h.page.onTasks([review]); assert.equal(h.$('generationTaskResult').textContent, '查看诊断');
+  assert.equal(h.$('generationTaskRestore').hidden, true); await h.$('generationTaskResult').fire('click');
+  assert.deepEqual(h.openedResults.at(-1), {project:'A',name:'diagnostic'});
+  assert.equal(h.current, 'A'); assert.equal(h.navigations.length, 0);
+  h.page.onTasks([generationTask({id:'fallback',status:'completed',created:12,args:{video:'C:\\video\\clip.mp4',solver:'temporal'}})]);
+  await h.$('generationTaskResult').fire('click'); assert.equal(h.openedResults.at(-1).name, 'clip_temporal', 'result path follows existing temporal POST normalization');
+  h.page.onTasks([generationTask({id:'cli-fallback',source:'cli',read_only:true,status:'done',created:13,args:{video:'/srv/clip.mp4',solver:'temporal'}})]);
+  await h.$('generationTaskResult').fire('click'); assert.equal(h.openedResults.at(-1).name, 'clip', 'external CLI fallback does not use Web POST normalization');
+});
+
+test('only current-project animation tasks enter the card; any active project task blocks generation', async () => {
+  const h = harness(); await h.page.refresh(); await h.choose('aniVideo', 'a.mp4');
+  h.page.onTasks([generationTask({project:'B'})]);
+  assert.equal(h.$('generationTaskCard').hidden, true); assert.equal(h.$('aniRun').disabled, false);
+  const train = generationTask({id:'training',cmd:'train'});
+  h.page.onTasks([train]); assert.equal(h.$('generationTaskCard').hidden, true); assert.equal(h.$('aniRun').disabled, true);
+  h.page.onTasks([{...train,status:'done'},generationTask({id:'old-animation',created:2,status:'done'})]);
+  assert.equal(h.$('generationTaskCard').hidden, false); assert.match(h.$('generationTaskMeta').textContent, /old-animation/);
+  assert.equal(h.$('aniRun').disabled, false);
+  const active = generationTask({id:'active-old',created:1});
+  h.page.onTasks([generationTask({id:'new-terminal',created:100,status:'done'}),active]);
+  assert.match(h.$('generationTaskMeta').textContent, /active-old/);
+  h.page.onTasks([{...active,status:'done'},generationTask({id:'new-terminal',created:100,status:'done'})]);
+  assert.match(h.$('generationTaskMeta').textContent, /new-terminal/);
+});
+
+test('CLI task observations are read-only, block conflicts, and ended_unknown never becomes completion', async () => {
+  const h = harness(); await h.page.refresh(); await h.choose('aniVideo', 'a.mp4');
+  const cli = generationTask({id:'cli-1',source:'cli',read_only:true,can_cancel:true});
+  h.page.onTasks([cli],{available:false,warning:'外部监视器降级'});
+  assert.equal(h.$('aniRun').disabled, true); assert.match(h.$('runDisabledReason').textContent, /外部只读/);
+  assert.match(h.$('generationTaskMeta').textContent, /外部只读观察/);
+  assert.match(h.$('generationTaskMonitor').textContent, /降级/);
+  assert.equal(Object.keys(h.run.nodes).some(id => /cancel/i.test(id)), false, 'generation card has no cancellation endpoint or control');
+  h.page.onTasks([{...cli,status:'unknown'}],{available:false,warning:'进程可见性不足'});
+  assert.equal(h.$('aniRun').disabled, true, 'loss of process visibility must not unlock conflicting work');
+  assert.match(h.$('runDisabledReason').textContent, /不能确认已结束/);
+  h.page.onTasks([{...cli,status:'ended_unknown',ended:20}],{available:true,warning:''});
+  assert.match(h.$('generationTaskStatus').textContent, /结果未知/);
+  assert.equal(h.$('generationTaskResult').hidden, true); assert.equal(h.$('generationTaskRestore').hidden, true);
+  assert.equal(h.$('generationTaskMonitor').hidden, true); assert.equal(h.openedResults.length, 0);
+  assert.equal(h.$('aniRun').disabled, false); assert.equal(h.submissions.length, 0);
+});
+
+test('missing observed active tasks remain unknown and cannot silently unlock conflicting generation', async () => {
+  const h = harness(); await h.page.refresh(); await h.choose('aniVideo', 'a.mp4');
+  const task = generationTask(); h.page.onTasks([task]); h.page.onTasks([]);
+  assert.match(h.$('generationTaskStatus').textContent, /待确认/); assert.equal(h.$('generationTaskResult').hidden, true);
+  assert.equal(h.$('aniRun').disabled, true); assert.match(h.$('runDisabledReason').textContent, /状态尚未确认/);
+  h.page.onTasks([{...task,status:'interrupted'}]); assert.equal(h.$('aniRun').disabled, false);
+});
+
+test('failed cancelled and interrupted animation actions only restore safe inputs with collision-free new names', async () => {
+  for (const status of ['failed','cancelled','interrupted']) {
+    const h = harness(); h.projects[0].outputs = ['walk','walk_retry','walk_retry_2']; await h.page.refresh();
+    const failed = generationTask({status,args:{video:'C:\\server\\videos\\u.mp4',name:'walk',solver:'temporal',swap:true,force:true,confirm_mismatch:true}});
+    const reserved = generationTask({id:'other-failed',status:'failed',created:1,args:{video:'a.mp4',name:'walk_retry_3'}});
+    h.page.onTasks([failed,reserved]);
+    h.$('aniForce').checked = h.$('aniUnbound').checked = h.$('aniMismatch').checked = true;
+    assert.equal(h.$('generationTaskRestore').hidden, false); await h.$('generationTaskRestore').fire('click');
+    assert.equal(h.$('aniVideo').value, 'u.mp4'); assert.equal(h.$('aniName').value, 'walk_retry_4');
+    assert.equal(h.$('aniSolver').value, 'temporal'); assert.equal(h.$('aniViewOrder').value, 'side-front');
+    for (const id of ['aniForce','aniUnbound','aniMismatch']) assert.equal(h.$(id).checked, false, status + ': ' + id);
+    assert.match(h.$('runStatus').textContent, /未提交任何任务/); assert.equal(h.submissions.length, 0);
+    await h.$('generateForm').fire('submit'); assert.equal(h.submissions.length, 0, 'explicit video matching acknowledgement still gates restored task');
+    h.$('aniUnbound').checked = true; await h.$('aniUnbound').fire('change'); await h.$('generateForm').fire('submit');
+    assert.equal(h.submissions.length, 1); assert.equal(h.submissions[0].args.name, 'walk_retry_4');
+    assert.equal(h.submissions[0].args.force, false); assert.equal(h.submissions[0].args.confirm_mismatch, false);
+    assert.equal(h.confirmations.length, 0, 'restored names must not overwrite prior or failed directories');
+  }
+});
+
+test('restore requires explicit current project, idle uploads/actions, and resets confirmations even on refusal', async () => {
+  const h = harness(); await h.page.refresh(); await h.choose('aniVideo', 'a.mp4'); await h.choose('aniName', 'keep', 'input');
+  const failed = generationTask({status:'failed'});
+  h.switchProject('B'); assert.equal(h.page.restoreTask(failed), false); assert.equal(h.current, 'B');
+  assert.equal(h.$('aniName').value, '', 'wrong-project restore never injects another project draft');
+  h.switchProject('A');
+  h.$('upVideo').files = [{name:'pending.mp4'}]; await h.$('upVideo').fire('change'); await tick();
+  h.$('aniForce').checked = h.$('aniMismatch').checked = h.$('aniUnbound').checked = true;
+  assert.equal(h.page.restoreTask(failed), false); assert.equal(h.$('aniName').value, 'keep');
+  for (const id of ['aniForce','aniMismatch','aniUnbound']) assert.equal(h.$(id).checked, false);
+  h.uploads[0].onerror(); await settle();
+  const active = generationTask({id:'busy'}); h.page.onTasks([active,failed]); assert.equal(h.page.restoreTask(failed), false);
+  h.page.onTasks([{...active,status:'done'},failed]);
+  const waiting = deferred(); h.setSubmitHook(() => waiting.promise);
+  const submission = h.$('generateForm').fire('submit'); await tick(); assert.equal(h.page.restoreTask(failed), false);
+  waiting.resolve(null); await submission; assert.equal(h.page.restoreTask(failed), true);
+  assert.equal(h.submissions.length, 1, 'loading must not submit another job');
+});
+
+test('restore does not bypass mismatched or missing video checks and fresh output reservations', async () => {
+  const h = harness(); await h.page.refresh();
+  const failed = generationTask({status:'failed',args:{video:'/srv/b.mp4',name:'walk',solver:'legacy',swap:false,force:true,confirm_mismatch:true}});
+  assert.equal(h.page.restoreTask(failed), true); assert.equal(h.$('aniVideo').value, 'b.mp4'); assert.equal(h.$('aniRun').disabled, true);
+  assert.equal(h.$('aniMismatch').checked, false); assert.equal(h.$('runAdvanced').open, true);
+  await h.$('generateForm').fire('submit'); assert.equal(h.submissions.length, 0);
+  h.$('aniMismatch').checked = true; await h.$('aniMismatch').fire('change');
+  const reserved = generationTask({id:'new-reservation',status:'failed',args:{video:'b.mp4',name:'walk_retry'}});
+  h.page.onTasks([failed,reserved]); assert.equal(h.$('aniRun').disabled, true); assert.match(h.$('runDisabledReason').textContent, /已被.*占用/);
+  const missing = {...failed,id:'missing',args:{video:'/gone/missing.mp4',name:'missing-result'}};
+  assert.equal(h.page.restoreTask(missing), true); assert.equal(h.$('aniVideo').value, ''); assert.match(h.$('runStatus').textContent, /原视频未在上传列表/);
+  await h.$('generateForm').fire('submit'); assert.equal(h.submissions.length, 0);
+});
+
+test('stabilize retains result/source links and never restores its arguments into animation', async () => {
+  const h = harness(); await h.page.refresh(); await h.choose('aniVideo', 'a.mp4'); await h.choose('aniName', 'untouched', 'input');
+  const task = generationTask({cmd:'stabilize',args:{source:'original',name:'smoothed'},status:'done'});
+  h.page.onTasks([task]); assert.equal(h.$('generationTaskTitle').textContent, '减少抖动任务');
+  assert.match(h.$('generationTaskMeta').textContent, /来源结果：original.*输出：smoothed/);
+  await h.$('generationTaskResult').fire('click'); await h.$('generationTaskSource').fire('click');
+  assert.deepEqual(h.openedResults, [{project:'A',name:'smoothed'},{project:'A',name:'original'}]);
+  h.page.onTasks([{...task,status:'failed'}]); assert.equal(h.$('generationTaskRestore').hidden, true);
+  assert.equal(h.page.restoreTask({...task,status:'failed'}), false); assert.equal(h.$('aniName').value, 'untouched');
+  assert.equal(h.submissions.length, 0);
+});
+
+test('overwrite flag exists only after an explicit legacy collision confirmation and never survives restore', async () => {
+  const h = harness(); h.projects[0].outputs = ['walk']; await h.page.refresh(); await h.choose('aniVideo', 'a.mp4');
+  await h.choose('aniName', 'walk', 'input'); await h.$('generateForm').fire('submit');
+  assert.equal(h.confirmations.length, 1); assert.equal(h.submissions[0].args.overwrite, true);
+  h.page.onTasks([generationTask({id:'job-1',status:'failed',args:{video:'a.mp4',name:'walk',solver:'legacy',overwrite:true}})]);
+  const failed = generationTask({id:'job-1',status:'failed',args:{video:'a.mp4',name:'walk',solver:'legacy',overwrite:true}});
+  assert.equal(h.page.restoreTask(failed), true); await h.$('generateForm').fire('submit');
+  assert.equal(h.submissions[1].args.overwrite, undefined); assert.equal(h.confirmations.length, 1);
+  h.page.onTasks([generationTask({id:'job-2',status:'done',args:h.submissions[1].args})]);
+  await h.choose('aniName', 'walk', 'input'); await h.choose('aniSolver', 'temporal');
+  await h.$('generateForm').fire('submit'); assert.equal(h.submissions.length, 2); assert.equal(h.confirmations.length, 1);
+  assert.match(h.$('runStatus').textContent, /同名实验结果已存在/);
+});
+
+test('external failed restore is input-only, monitor warnings survive without a generation task, and server strings remain inert', async () => {
+  const h = harness(); await h.page.refresh();
+  h.page.onTasks([],{available:false}); assert.equal(h.$('generationMonitorWarning').hidden, false);
+  assert.match(h.$('generationMonitorWarning').textContent, /暂不可用/);
+  const task = generationTask({source:'cli',read_only:true,status:'failed',args:{video:'a.mp4',name:'<img onerror=bad>',force:true},phase:{label:'<svg onload=bad>',current:1,total:2,unit:'帧'}});
+  h.page.onTasks({tasks:[task],monitor:{available:true,warning:'<b>warning</b>'}});
+  assert.match(h.$('generationTaskMeta').textContent, /<img onerror=bad>/); assert.match(h.$('generationTaskPhase').textContent, /<svg onload=bad>/);
+  assert.equal(h.page.restoreTask(task), true); assert.equal(h.$('aniName').value, 'a_retry');
+  assert.match(h.$('runStatus').textContent, /不会自动重放 CLI/); assert.equal(h.submissions.length, 0);
+  const listing = h.$('generationTaskCard'); await h.page.refresh(); assert.equal(h.$('generationTaskCard'), listing);
 });
 
 (async () => {

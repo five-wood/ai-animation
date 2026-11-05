@@ -55,6 +55,7 @@ class RunBindingTests(unittest.TestCase):
             path.mkdir()
             paths[key] = str(path)
         self.queue = mock.Mock()
+        self.queue.list.return_value = []
         self.queue.add.side_effect = lambda project, cmd, args: {
             "project": project, "cmd": cmd, "args": args, "dry_run": True}
         paths["JOBS"] = self.queue

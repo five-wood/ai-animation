@@ -1,5 +1,6 @@
 import { initRunPage } from "./run-page.js?v=workspace-v1";
 import { initResults } from "./results.js?v=workspace-v1";
+import { taskActive, taskStatus, taskReadOnly, taskCanCancel, taskPhaseHTML, taskSource, taskAdvice, taskResultName } from './task-ui.js?v=workspace-v2';
 
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -17,7 +18,7 @@ const PAGES={overview:['项目概览','角色状态与下一步操作'],run:['�
 const CMD={pipeline:'准备与训练',prepare:'准备模型',gen:'生成训练数据',train:'训练',exam:'自动验证',animate:'生成动画',stabilize:'减少抖动'};
 const STATUS={queued:['排队中',''],running:['处理中','run'],done:['执行完成','ok'],needs_review:['需检查','warning'],failed:['执行失败','bad'],cancelled:['已取消',''],interrupted:['已中断','warning']};
 const state={projects:[],cur:null,tab:'overview',jobs:[],jobSel:null,sOffset:0,sLimit:48,sSel:null,sAugSeed:1,detail:null,pending:new Set(),pageSequence:0,jobsSequence:0};
-const active=j=>['queued','running'].includes(j.status);
+const active=taskActive;
 const current=()=>state.projects.find(p=>p.name===state.cur);
 function notify(text,type='') {const el=$('#notification');el.textContent=text;el.className='run-notice '+type;el.hidden=!text;}
 function error(text) {const el=$('#pageError');el.textContent=text;el.hidden=!text;if(text){const retry=document.createElement('button');retry.textContent='重试加载';retry.className='text-button';retry.onclick=()=>loadProjects().then(refreshTab).catch(e=>error(e.message));el.append(' ',retry);}}
@@ -26,15 +27,24 @@ const purl=(p=state.cur)=>`/api/projects/${enc(p)}`;
 function bindNavigation(root=document) {root.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>navigate(b.dataset.nav));}
 function context() {
   const p=current();const [label,cls]=STAGE[p?.stage]||[state.cur?'正在准备项目':'未选择角色',''];
-  $('#projectStatus').textContent=label;$('#projectStatus').className='badge '+cls;
+  const running=state.jobs.find(j=>j.project===state.cur&&active(j));
+  $('#projectStatus').textContent=running?`${taskSource(running)} · ${running.phase?.label||taskStatus(running)[0]}`:label;$('#projectStatus').className='badge '+(running?'run':cls);
   document.querySelectorAll('[data-step]').forEach(b=>{const busy=state.jobs.some(j=>j.project===state.cur&&active(j));b.disabled=busy||!p||(b.dataset.step==='gen'?!p.bones:b.dataset.step==='train'?!p.samples:!p.has_reader);if(b.dataset.step==='train')b.textContent=p?.has_reader?'重新训练':'开始训练';});
   $('#contextName').textContent=state.cur||'尚无项目';$('#outputCount').textContent=p?.outputs?.length||0;
   $('#pageEyebrow').textContent=state.cur?'角色 / '+state.cur:'角色工作区';
 }
 let projectsSequence=0, selectionSequence=0, routeSequence=0;
-async function loadProjects() {
+let projectsLoadedAt=0, projectsPending=null;
+async function loadProjects(force=false) {
+  if(!force&&Date.now()-projectsLoadedAt<5000&&state.projects.length){context();runPage.onProjects();return;}
+  if(projectsPending)return projectsPending;
+  const work=fetchProjects();projectsPending=work;
+  try{return await work;}finally{if(projectsPending===work)projectsPending=null;}
+}
+async function fetchProjects() {
   const sequence=++projectsSequence;
   const rows=await api('/api/projects');if(sequence!==projectsSequence)return;
+  projectsLoadedAt=Date.now();
   state.projects=rows;
   for(const j of state.jobs)if(j.cmd==='pipeline'&&active(j)&&!rows.some(p=>p.name===j.project))state.pending.add(j.project);
   for(const name of state.pending)if(rows.some(p=>p.name===name)||!state.jobs.some(j=>j.project===name&&j.cmd==='pipeline'&&active(j)))state.pending.delete(name);
@@ -50,7 +60,7 @@ async function selectProject(name,{route=false}={}) {
   if(name===state.cur)return;
   const sequence=++selectionSequence;state.pageSequence++;results.pause();state.cur=name;results.pause();runPage.syncProject(name);state.sOffset=0;state.sSel=null;state.detail=null;resetProjectViews();context();
   if(!state.projects.some(p=>p.name===name)&&state.jobs.some(j=>j.project===name&&j.cmd==='pipeline'&&active(j)))state.pending.add(name);
-  await loadProjects();if(sequence!==selectionSequence)return;
+  await loadProjects(!state.projects.some(p=>p.name===name));if(sequence!==selectionSequence)return;
   await runPage.syncProject(state.cur);if(sequence!==selectionSequence)return;context();
   if(!route)history.replaceState(null,'',`#${enc(state.cur||'')}/${state.tab}`);if(!route)await refreshTab();
   if($('#tasksDialog').open)renderJobs();
@@ -109,7 +119,7 @@ async function renderTrain() {
   const name=state.cur,seq=state.pageSequence,p=current();const target=$('#trainConclusion');
   if(!name){target.innerHTML=empty('请选择或新建角色');target.querySelector('[data-create]').onclick=()=>runPage.openCreate();return;}
   const job=state.jobs.find(j=>j.project===name&&active(j));
-  target.innerHTML=`<div class="conclusion panel"><div><h2>${job?'任务正在执行':p?.has_reader?'角色训练已完成':p?.samples?'训练数据已就绪':state.pending.has(name)?'项目已排队':'角色尚未完成训练'}</h2><p class="hint">${job?'离开或刷新页面不会停止服务端任务。':p?.has_reader?'查看验证报告，确认还原精度；也可以生成动画进行人工预览。':'先生成训练数据，再训练角色识别器。新建项目将自动依次执行。'}</p></div><button data-nav="exam">查看验证报告 →</button></div>`;bindNavigation(target);
+  target.innerHTML=`<div class="conclusion panel"><div><h2>${job?esc((job.phase?.label||CMD[job.cmd]||'任务')+'进行中'):p?.has_reader?'已有训练模型':p?.samples?'训练数据已就绪':state.pending.has(name)?'项目已排队':'角色尚未完成训练'}</h2><p class="hint">${job?'离开或刷新页面不会停止服务端任务。':p?.has_reader?'查看验证报告，确认还原精度；也可以生成动画进行人工预览。':'先生成训练数据，再训练角色识别器。新建项目将自动依次执行。'}</p></div><button data-nav="exam">查看验证报告 →</button></div>`;bindNavigation(target);
   document.querySelectorAll('[data-step]').forEach(b=>{b.disabled=!!job||!p||b.dataset.step==='train'&&!p.samples||b.dataset.step==='gen'&&!p.bones||b.dataset.step==='exam'&&!p.has_reader;});
   renderProjectTask();
   if(!p){['cLoss','cVal','cDepth'].forEach(id=>chart($('#'+id),[]));$('#trainLog').textContent='等待项目准备…';return;}
@@ -153,29 +163,36 @@ function confirmAction(title,text,button='确认执行') {return new Promise(res
 let submitting=false;
 async function submit(project,cmd,args) {
   if(submitting)throw new Error('另一个任务正在提交，请稍候。');submitting=true;
-  try {const j=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project,cmd,args})});state.jobSel=j.id;state.jobs=[j,...state.jobs.filter(x=>x.id!==j.id)];notify(`${CMD[cmd]||cmd}任务已提交 · ${project}。可在任务中心查看进度。`,'success');renderProjectTask();pollJobs().catch(e=>notify(e.message,'error'));return j;}finally{submitting=false;}
+  try {const j=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project,cmd,args})});state.jobSel=j.id;state.jobs=[j,...state.jobs.filter(x=>x.id!==j.id)];notify(`${CMD[cmd]||cmd}任务已提交 · ${project}。可在任务中心查看进度。`,'success');renderProjectTask();runPage.onTasks?.(state.jobs,monitorInfo);pollJobs().catch(e=>notify(e.message,'error'));return j;}finally{submitting=false;}
 }
-const runPage=initRunPage({api,submit,current:()=>state.cur,projects:()=>state.projects,selectProject,navigate,notify});
+let taskActionSequence=0;
+async function openResult(project,name){const action=++taskActionSequence,route=routeSequence;await selectProject(project);if(action!==taskActionSequence||route!==routeSequence||state.cur!==project)return false;const selection=selectionSequence;await results.select(name);if(action!==taskActionSequence||route!==routeSequence||selection!==selectionSequence||state.cur!==project)return false;await navigate('outputs');return true;}
+const runPage=initRunPage({api,submit,current:()=>state.cur,projects:()=>state.projects,selectProject,navigate,notify,openResult});
 const results=initResults({api,submit,current:()=>state.cur,notify,chart});
 $('#openCreate').onclick=()=>runPage.openCreate();$('#openTasks').onclick=openTasks;$('#closeTasks').onclick=()=>$('#tasksDialog').close();$('#refreshJobs').onclick=()=>pollJobs().catch(e=>jobError(e.message));$('#jobScope').onchange=()=>{state.jobSel=null;renderJobs();};
 function openTasks(){if(!$('#tasksDialog').open)$('#tasksDialog').showModal();pollJobs().catch(e=>jobError(e.message));}
 function jobError(text){$('#jobError').textContent=text;$('#jobError').hidden=!text;}
 function duration(j){return j.started?`${fmt(((j.ended||Date.now()/1000)-j.started)/60,1)} 分钟`:'等待执行';}
-function resultName(j){return j.result_name||j.args?.name||(j.args?.video||'').split(/[\\/]/).pop()?.replace(/\.[^.]+$/,'');}
-function jobAdvice(j){return ({queued:'任务已进入服务端队列，前面的任务完成后开始。',running:'正在服务端处理，离开或刷新页面不会停止。',done:'程序已执行完成。生成结果仍需检查自动结论并人工预览。',needs_review:'输入一致性检查需要关注。诊断已保存，可查看异常时间段。',failed:'任务执行失败。请查看技术日志定位原因，再调整输入或参数。',cancelled:'本次执行已取消。现有文件是否完整，请以对应结果页为准。',interrupted:'任务记录为中断状态，请检查已有产物后决定是否重试。'})[j.status]||j.status;}
-function renderProjectTask(){const el=$('#projectTask');const j=state.jobs.find(x=>x.project===state.cur&&active(x))||state.jobs.find(x=>x.project===state.cur);if(!j){el.innerHTML='';return;}const [st,cl]=STATUS[j.status]||[j.status,''];el.innerHTML=`<div class="task-inline panel"><div><strong>${CMD[j.cmd]||esc(j.cmd)}</strong> ${badge(st,cl)}<p class="hint">${esc(j.project)} · ${duration(j)} · ${jobAdvice(j)}</p></div><button id="inlineTaskDetail">查看任务 →</button></div>`;$('#inlineTaskDetail').onclick=()=>{state.jobSel=j.id;openTasks();};}
-async function pollJobs(){const seq=++state.jobsSequence;const jobs=await api('/api/jobs');if(seq!==state.jobsSequence)return;const completed=jobs.some(j=>!active(j)&&active(state.jobs.find(x=>x.id===j.id)||{}));state.jobs=jobs;$('#taskCount').textContent=jobs.filter(active).length;context();renderProjectTask();if($('#tasksDialog').open)await renderJobs();if(completed){await loadProjects();await refreshTab();}}
+function resultName(j){return taskResultName(j);}
+function jobAdvice(j){return taskAdvice(j);}
+let projectTaskSignature='';
+function renderProjectTask(){const el=$('#projectTask');const j=state.jobs.find(x=>x.project===state.cur&&active(x))||state.jobs.find(x=>x.project===state.cur);const signature=JSON.stringify([state.cur,j?.id,j?.status,j?.phase,j?.progress_updated_at]);if(signature===projectTaskSignature&&el.innerHTML)return;projectTaskSignature=signature;if(!j){el.innerHTML='';return;}const [st,cl]=taskStatus(j);el.innerHTML=`<div class="task-inline panel"><div><strong>${CMD[j.cmd]||esc(j.cmd)}</strong> ${badge(st,cl)}<p class="hint">${esc(j.project)} · ${esc(taskSource(j))} · ${duration(j)}</p>${taskPhaseHTML(j)}<p class="hint">${jobAdvice(j)}</p></div><button id="inlineTaskDetail">查看任务 →</button></div>`;$('#inlineTaskDetail').onclick=()=>{state.jobSel=j.id;openTasks();};}
+let unifiedTasks=true, monitorInfo={available:true,warning:null};
+async function fetchTaskSnapshot(){if(unifiedTasks){try{return await api('/api/tasks');}catch(e){if(e.status!==404)throw e;unifiedTasks=false;}}return {tasks:await api('/api/jobs'),monitor:{available:false,warning:'当前服务仅提供 Web 队列。命令行任务未纳入统计；后端更新后刷新页面启用统一监控。'}};}
+async function pollJobs(){const seq=++state.jobsSequence;let snapshot;try{snapshot=await fetchTaskSnapshot();}catch(e){monitorInfo={available:false,warning:'任务监控暂不可用，保留上次观测状态：'+e.message};runPage.onTasks?.(state.jobs,monitorInfo);$('#taskCount').textContent='?';showMonitorWarning();throw e;}if(seq!==state.jobsSequence)return;const jobs=snapshot.tasks||[];const completed=jobs.some(j=>!active(j)&&active(state.jobs.find(x=>x.id===j.id)||{}));state.jobs=jobs;monitorInfo=snapshot.monitor||{available:true};$('#taskCount').textContent=monitorInfo.available===false?'?':jobs.filter(active).length;$('#openTasks').title=monitorInfo.warning||'查看 Web 与命令行任务';context();renderProjectTask();runPage.onTasks?.(jobs,monitorInfo);showMonitorWarning();if($('#tasksDialog').open)await renderJobs();if(completed){await loadProjects(true);if(state.tab==='train')await renderTrain();}}
+function showMonitorWarning(){const el=$('#taskMonitorWarning');if(!el)return;el.hidden=!monitorInfo.warning;if(el.textContent!==(monitorInfo.warning||''))el.textContent=monitorInfo.warning||'';}
 let jobViewSignature='';
 async function renderJobs(){jobError('');const rows=state.jobs.filter(j=>$('#jobScope').value==='all'||j.project===state.cur);if(!rows.some(j=>j.id===state.jobSel))state.jobSel=rows[0]?.id||null;
-  const signature=JSON.stringify([state.cur,$('#jobScope').value,state.jobSel,rows.map(j=>[j.id,j.status,j.ended])]);
-  if(signature===jobViewSignature&&$('#jobLog')){const id=state.jobSel;try{const lg=await api(`/api/jobs/${enc(id)}/log?tail=300`);if(state.jobSel===id&&$('#jobLog')){const el=$('#jobLog'),bottom=el.scrollTop+el.clientHeight>=el.scrollHeight-20;el.textContent=lg.lines.join('\n')||'任务尚无日志';if(bottom)el.scrollTop=el.scrollHeight;}}catch(e){jobError(e.message);}return;}
+  const signature=JSON.stringify([state.cur,$('#jobScope').value,state.jobSel,rows.map(j=>[j.id,j.status,j.ended,j.phase,j.progress_updated_at])]);
+  if(signature===jobViewSignature&&$('#jobLog')){const id=state.jobSel;try{const lg=await api(`${unifiedTasks?'/api/tasks':'/api/jobs'}/${enc(id)}/log?tail=300`);if(state.jobSel===id&&$('#jobLog')){const el=$('#jobLog'),bottom=el.scrollTop+el.clientHeight>=el.scrollHeight-20;el.textContent=lg.lines.join('\n')||'任务尚无日志';if(bottom)el.scrollTop=el.scrollHeight;}}catch(e){jobError(e.message);}return;}
   jobViewSignature=signature;
-  $('#jobList').innerHTML=rows.map(j=>{const [t,c]=STATUS[j.status]||[j.status,''];return `<button class="item ${j.id===state.jobSel?'sel':''}" data-job="${esc(j.id)}" aria-pressed="${j.id===state.jobSel}"><strong>${CMD[j.cmd]||esc(j.cmd)}</strong>${badge(t,c)}<span class="s">${esc(j.project)} · ${esc(resultName(j)||j.args?.model?.split(/[\\/]/).pop()||'角色处理')}</span><span class="s">${ago(j.created)} · ${duration(j)}</span></button>`;}).join('')||'<div class="empty-state">此范围暂无任务</div>';
+  $('#jobList').innerHTML=rows.map(j=>{const [t,c]=taskStatus(j);return `<button class="item ${j.id===state.jobSel?'sel':''}" data-job="${esc(j.id)}" aria-pressed="${j.id===state.jobSel}"><strong>${CMD[j.cmd]||esc(j.cmd)}</strong>${badge(t,c)}<span class="s">${esc(j.project)} · ${esc(taskSource(j))}</span><span class="s">${esc(j.phase?.label||resultName(j)||j.args?.model?.split(/[\\/]/).pop()||'角色处理')}</span><span class="s">${ago(j.created)} · ${duration(j)}</span></button>`;}).join('')||'<div class="empty-state">此范围暂无任务</div>';
   $('#jobList').querySelectorAll('button').forEach(b=>b.onclick=()=>{state.jobSel=b.dataset.job;renderJobs().catch(e=>jobError(e.message));});const j=rows.find(x=>x.id===state.jobSel);if(!j){$('#jobDetail').innerHTML='<div class="empty-state">选择任务查看详情</div>';return;}
-  const id=j.id,[st,cl]=STATUS[j.status]||[j.status,''];const d=$('#jobDetail');const detailsWasOpen=d.querySelector('details')?.open;d.innerHTML=`<div class="section-heading"><h3>${CMD[j.cmd]||esc(j.cmd)}</h3>${badge(st,cl)}</div><p class="context-label">项目：${esc(j.project)}</p><p>${jobAdvice(j)}</p><div class="kv"><b>任务</b><span>${esc(j.id)}</span><b>输入 / 输出</b><span>${esc(resultName(j)||j.args?.model||'–')}</span><b>耗时</b><span>${duration(j)}</span></div><div class="toolbar">${active(j)?'<button id="cancelJob">取消任务</button>':''}${['done','needs_review'].includes(j.status)?'<button class="primary" id="viewJobResult">'+(['animate','stabilize'].includes(j.cmd)?'查看动画结果':'查看项目')+' →</button>':''}</div><details class="advanced" ${detailsWasOpen?'open':''}><summary>技术详情 · 完整执行日志</summary><pre id="jobLog" class="log tall" tabindex="0">正在读取日志…</pre></details>`;
+  const id=j.id,[st,cl]=taskStatus(j);const d=$('#jobDetail');const detailsWasOpen=d.querySelector('details')?.open;d.innerHTML=`<div class="section-heading"><h3>${CMD[j.cmd]||esc(j.cmd)}</h3>${badge(st,cl)}</div><p class="context-label">项目：${esc(j.project)} · ${esc(taskSource(j))}</p><p>${jobAdvice(j)}</p>${taskPhaseHTML(j)}<div class="kv"><b>任务</b><span>${esc(j.id)}</span><b>输入 / 输出</b><span>${esc(resultName(j)||j.args?.model||'–')}</span><b>耗时</b><span>${duration(j)}</span></div><div class="toolbar">${taskCanCancel(j)?'<button id="cancelJob">取消任务</button>':''}${!taskReadOnly(j)&&['failed','cancelled','interrupted'].includes(j.status)&&j.cmd==='animate'?'<button id="restoreJob" class="primary">载入参数并重新核对</button>':''}${['done','needs_review'].includes(j.status)?'<button class="primary" id="viewJobResult">'+(['animate','stabilize'].includes(j.cmd)?'查看动画结果':'查看项目')+' →</button>':''}</div><details class="advanced" ${detailsWasOpen?'open':''}><summary>技术详情 · 完整执行日志</summary><pre id="jobLog" class="log tall" tabindex="0">正在读取日志…</pre></details>`;
   if($('#cancelJob'))$('#cancelJob').onclick=async()=>{if(!await confirmAction('取消任务',`即将取消 ${j.project} 的${CMD[j.cmd]}。已写入的中间文件不会自动清除。`,'取消该任务'))return;try{await api(`/api/jobs/${enc(id)}/cancel`,{method:'POST'});await pollJobs();}catch(e){jobError(e.message);}};
-  if($('#viewJobResult'))$('#viewJobResult').onclick=async()=>{try{await selectProject(j.project);if(['animate','stabilize'].includes(j.cmd)){results.select(resultName(j));navigate('outputs');}else navigate(j.cmd==='exam'?'exam':'train');$('#tasksDialog').close();}catch(e){jobError(e.message);}};
-  try{const lg=await api(`/api/jobs/${enc(id)}/log?tail=300`);if(state.jobSel!==id||!$('#jobLog'))return;$('#jobLog').textContent=lg.lines.join('\n')||'任务尚无日志';}catch(e){if(state.jobSel===id)jobError(e.message);}
+  if($('#restoreJob'))$('#restoreJob').onclick=async()=>{try{const action=++taskActionSequence,route=routeSequence;await selectProject(j.project);if(action!==taskActionSequence||route!==routeSequence||state.cur!==j.project)return;await navigate('run');const selection=selectionSequence;await runPage.refresh();if(action!==taskActionSequence||state.cur!==j.project||selection!==selectionSequence)return;if(runPage.restoreTask(j)){$('#tasksDialog').close();$('#aniName')?.focus();}else jobError('暂时不能载入，请等待上传或文件列表刷新完成。不会自动提交任务。');}catch(e){jobError(e.message);}};
+  if($('#viewJobResult'))$('#viewJobResult').onclick=async()=>{try{if(['animate','stabilize'].includes(j.cmd))await openResult(j.project,resultName(j));else {await selectProject(j.project);await navigate(j.cmd==='exam'?'exam':'train');}$('#tasksDialog').close();}catch(e){jobError(e.message);}};
+  try{const lg=await api(`${unifiedTasks?'/api/tasks':'/api/jobs'}/${enc(id)}/log?tail=300`);if(state.jobSel!==id||!$('#jobLog'))return;$('#jobLog').textContent=lg.lines.join('\n')||'任务尚无日志';}catch(e){if(state.jobSel===id)jobError(e.message);}
 }
 document.querySelectorAll('[data-step]').forEach(b=>b.onclick=async()=>{const p=current(),cmd=b.dataset.step;if(!p)return;if(state.jobs.some(j=>j.project===p.name&&active(j))){error('当前项目已有排队或运行中的任务，请在任务中心查看，完成后再提交。');return;}const title=CMD[cmd];const impact=cmd==='gen'?'将重新写入训练数据，后续应重新训练与验证。':cmd==='train'?'将写入当前项目的训练模型。已有模型不承诺可回退。':'将更新当前项目的验证报告和验证产物。';if(!await confirmAction(`${title} · ${p.name}`,impact+'\n此操作作用于当前项目，不会替换项目模型。','确认'+title))return;if(state.jobs.some(j=>j.project===p.name&&active(j))){error('此项目刚刚加入了新任务，请等待当前任务完成。');return;}b.disabled=true;try{await submit(p.name,cmd,{});await refreshTab();}catch(e){error(e.message);}finally{context();}});
 async function refreshTab(){const seq=++state.pageSequence;error('');context();try {if(state.tab!=='exam')$('#examVid').pause();if(state.tab!=='run')$('#runVideo')?.pause();if(state.tab==='overview')await renderOverview();if(state.tab==='run')await runPage.refresh();if(state.tab==='outputs')await results.refresh();if(state.tab==='train')await renderTrain();if(state.tab==='samples')await renderSamples();if(state.tab==='exam')await renderExam();}catch(e){if(seq===state.pageSequence)error(e.message);}}
@@ -186,4 +203,4 @@ window.addEventListener('resize',()=>{results.resize();if(state.tab==='train'&&s
 $('#tab-train').querySelector('details').addEventListener('toggle',()=>{if(state.trainData)drawTrain(state.trainData);});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){results.pause();$('#examVid').pause();$('#runVideo')?.pause();}});
 $('#overviewContent').innerHTML='<div class="panel empty-state" role="status">正在读取角色工作区…</div>';$('#projSel').add(new Option('正在读取项目…',''));
-(async()=>{try{const [p,t]=location.hash.slice(1).split('/');if(p)state.cur=decodeURIComponent(p);state.jobs=await api('/api/jobs');await loadProjects();await pollJobs();await navigate(t||'overview',false);renderSys();}catch(e){error('初始化失败：'+e.message);}})();
+(async()=>{try{const [p,t]=location.hash.slice(1).split('/');if(p)state.cur=decodeURIComponent(p);try{const initial=await fetchTaskSnapshot();state.jobs=initial.tasks||[];monitorInfo=initial.monitor||{available:true};}catch(e){monitorInfo={available:false,warning:'暂时无法读取任务监控，项目仍可浏览：'+e.message};}await loadProjects();$('#taskCount').textContent=monitorInfo.available===false?'?':state.jobs.filter(active).length;runPage.onTasks?.(state.jobs,monitorInfo);showMonitorWarning();await navigate(t||'overview',false);renderSys();}catch(e){error('初始化失败：'+e.message);}})();

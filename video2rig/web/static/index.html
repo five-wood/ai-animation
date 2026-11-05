@@ -39,7 +39,7 @@
   <section id="tab-run" class="tab" aria-label="生成动画"><div id="generateContent"></div></section>
   <section id="tab-outputs" class="tab" aria-label="动画结果"><div id="outputsContent"></div></section>
   <section id="tab-train" class="tab" aria-label="训练情况">
-    <div id="trainConclusion"></div><div id="projectTask" class="project-task" aria-live="polite"></div>
+    <div id="trainConclusion"></div><div id="projectTask" class="project-task"></div>
     <div class="toolbar maintenance"><button data-step="train" class="primary">开始训练</button><button data-step="gen">生成训练数据</button><button data-step="exam">运行验证</button><button data-nav="samples" class="text-button">查看训练数据 →</button></div>
     <div class="chart-grid"><div class="panel"><h3>训练损失</h3><canvas id="cLoss" data-height="220" height="220" aria-label="训练损失曲线"></canvas></div><div class="panel"><h3>验证集关节误差 · 像素</h3><canvas id="cVal" data-height="220" height="220" aria-label="验证集误差曲线"></canvas></div></div>
     <details class="panel advanced"><summary>技术详情 · 深度顺序与训练日志</summary><div class="chart-grid"><div><h3>近 / 远腿深度顺序准确率</h3><canvas id="cDepth" data-height="200" height="200"></canvas></div><div><h3>训练日志</h3><pre id="trainLog" class="log" tabindex="0">暂无日志</pre></div></div></details>
@@ -52,7 +52,7 @@
 </main>
 </div>
 <dialog id="createDialog" class="create-dialog" aria-labelledby="createHeading"><div id="createContent"></div></dialog>
-<dialog id="tasksDialog" class="tasks-dialog" aria-labelledby="tasksTitle"><div class="dialog-header"><div><div class="eyebrow">持续执行，无需停留此页</div><h2 id="tasksTitle">任务中心</h2></div><button id="closeTasks" aria-label="关闭任务中心">✕</button></div><div class="toolbar"><label for="jobScope">任务范围</label><select id="jobScope"><option value="current">当前项目</option><option value="all">全部项目</option></select><button id="refreshJobs">刷新</button></div><div id="jobError" class="run-notice error" role="alert" hidden></div><div class="tasks-layout"><div id="jobList" class="list"></div><div id="jobDetail" class="job-detail"></div></div></dialog>
+<dialog id="tasksDialog" class="tasks-dialog" aria-labelledby="tasksTitle"><div class="dialog-header"><div><div class="eyebrow">持续执行，无需停留此页</div><h2 id="tasksTitle">任务中心</h2></div><button id="closeTasks" aria-label="关闭任务中心">✕</button></div><div class="toolbar"><label for="jobScope">任务范围</label><select id="jobScope"><option value="current">当前项目</option><option value="all">全部项目</option></select><button id="refreshJobs">刷新</button></div><p class="hint">Web 任务可管理；命令行任务仅观测。进程消失不代表执行成功。</p><div id="taskMonitorWarning" class="run-notice warning" role="status" hidden></div><div id="jobError" class="run-notice error" role="alert" hidden></div><div class="tasks-layout"><div id="jobList" class="list"></div><div id="jobDetail" class="job-detail"></div></div></dialog>
 <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmTitle"><form method="dialog"><h2 id="confirmTitle">确认操作</h2><p id="confirmText"></p><div class="toolbar"><button value="cancel">取消</button><button id="confirmAction" class="primary" value="ok">确认执行</button></div></form></dialog>
 <script type="module" src="/static/app.js?v=workspace-v1"></script>
 </body>

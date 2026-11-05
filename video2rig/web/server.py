@@ -18,6 +18,7 @@ import signal
 import tempfile
 import threading
 import subprocess
+import uuid
 from functools import lru_cache
 
 import numpy as np
@@ -29,6 +30,8 @@ from fastapi.staticfiles import StaticFiles
 CODE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, CODE)
 from v2r.viz import draw_kps, composite_bg, put_title  # noqa: E402
+from web.project_store import ProjectStore  # noqa: E402
+from web.task_monitor import TaskMonitor, read_process_identity, bounded_log_tail  # noqa: E402
 
 ROOT = os.environ.get("V2R_ROOT", "/data/video2rig")
 PROJ = os.path.join(ROOT, "projects")
@@ -45,6 +48,34 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 NAME_RE = re.compile(r"^[A-Za-z0-9_\-\.]+$")
 VIDEO_BINDINGS_LOCK = threading.Lock()
+PROJECT_STORE = ProjectStore(PROJ)
+TASK_MONITOR = TaskMonitor(PROJ, JOBS_DIR)
+_STORE_ROOT = PROJ
+_MONITOR_ROOT = PROJ
+
+
+def project_store():
+    global PROJECT_STORE, _STORE_ROOT
+    if _STORE_ROOT != PROJ:
+        PROJECT_STORE, _STORE_ROOT = ProjectStore(PROJ), PROJ
+    return PROJECT_STORE
+
+
+def task_monitor():
+    global TASK_MONITOR, _MONITOR_ROOT
+    if _MONITOR_ROOT != PROJ:
+        TASK_MONITOR, _MONITOR_ROOT = TaskMonitor(PROJ, JOBS_DIR), PROJ
+    return TASK_MONITOR
+
+
+def task_snapshot():
+    return task_monitor().snapshot(JOBS.list())
+
+
+@app.on_event('startup')
+def warm_project_summaries():
+    # Pay the one-time metadata parse before readiness, never on first navigation.
+    project_store().list(lambda n: bool(NAME_RE.fullmatch(n)) and not n.startswith('.'))
 
 
 def safe_name(n):
@@ -96,52 +127,13 @@ def index():
 
 # ----------------------------------------------------------------------------- projects
 def project_summary(name):
-    d = os.path.join(PROJ, name)
-    rig = jload(os.path.join(d, "rig.json"), {})
-    studio = jload(os.path.join(d, "studio.json"), {}) or {}
-    prepare = jload(os.path.join(d, "prepare_opts.json"), {}) or {}
-    tr = os.path.join(d, "train_data")
-    n_samples = 0
-    for f in glob.glob(os.path.join(tr, "meta_*.json")):
-        try:
-            n_samples += len(jload(f, []))
-        except Exception:
-            pass
-    log = read_jsonl(os.path.join(d, "model", "train_log.jsonl"))
-    exam = jload(os.path.join(d, "exam", "exam_report.json"))
-    outs = sorted(os.path.basename(x) for x in glob.glob(os.path.join(d, "out", "*")) if os.path.isdir(x))
-    stage = "prepared" if rig else "empty"
-    if n_samples:
-        stage = "data"
-    if os.path.exists(os.path.join(d, "model", "best.pt")):
-        stage = "trained"
-    if exam:
-        stage = "exam_passed" if exam.get("passed") else "exam_failed"
-    return {
-        "name": name,
-        "model": rig.get("model"),
-        "model_name": os.path.basename(rig.get("model") or ""),
-        "has_reader": os.path.isfile(os.path.join(d, "model", "best.pt")),
-        "visual_profile": studio.get("visual_profile") or prepare.get("visual_profile", "legacy"),
-        "bones": len(rig.get("bones", [])),
-        "active": rig.get("n_active"),
-        "keypoints": len(rig.get("keypoints", [])),
-        "samples": n_samples,
-        "epochs": len(log),
-        "last_val": log[-1] if log else None,
-        "exam": {k: exam[k] for k in ("passed", "joint_err_mean_pct_of_size", "bone_angle_mean_deg",
-                                     "bone_angle_median_deg", "root_angle_mean_deg")} if exam else None,
-        "outputs": outs,
-        "stage": stage,
-        "mtime": os.path.getmtime(d),
-        "has_reference": os.path.exists(os.path.join(d, "reference_two_views.png")),
-    }
+    proj_dir(name)
+    return project_store().summary(name)
 
 
 @app.get("/api/projects")
 def projects():
-    names = sorted(n for n in os.listdir(PROJ) if os.path.isdir(os.path.join(PROJ, n)) and NAME_RE.match(n))
-    return [project_summary(n) for n in names]
+    return project_store().list(lambda n: bool(NAME_RE.fullmatch(n)) and not n.startswith('.'))
 
 
 @app.get("/api/projects/{p}")
@@ -253,7 +245,7 @@ def train_log(p: str):
     tl = os.path.join(d, "train.log")
     if os.path.exists(tl):
         for line in open(tl, errors="ignore"):
-            m = re.search(r"ep (\d+) step (\d+)/(\d+) hm ([\d.]+) depth ([\d.]+) ([\d.]+)min", line)
+            m = re.search(r"ep (\d+) step (\d+)/(\d+) hm ([\d.]+) depth ([\d.]+) .*?([\d.]+)min", line)
             if m:
                 steps.append({"ep": int(m[1]), "step": int(m[2]), "total": int(m[3]), "hm": float(m[4]),
                               "depth": float(m[5]), "min": float(m[6])})
@@ -415,7 +407,8 @@ class Jobs:
                     j["status"] = "interrupted"
                 self.jobs[j["id"]] = j
         self.proc = None
-        threading.Thread(target=self._loop, daemon=True).start()
+        if os.environ.get('V2R_DISABLE_WORKER') != '1':
+            threading.Thread(target=self._loop, daemon=True).start()
 
     def _save(self, j):
         with open(os.path.join(JOBS_DIR, j["id"] + ".json"), "w") as f:
@@ -426,11 +419,13 @@ class Jobs:
             return sorted(self.jobs.values(), key=lambda j: j["created"], reverse=True)
 
     def add(self, project, cmd, args):
-        jid = time.strftime("%Y%m%d-%H%M%S") + f"-{cmd}-{project}"
+        jid = time.strftime("%Y%m%d-%H%M%S") + f"-{cmd}-{project}-" + uuid.uuid4().hex[:8]
         j = {"id": jid, "project": project, "cmd": cmd, "args": args, "status": "queued",
              "created": time.time(), "started": None, "ended": None, "rc": None,
              "log": os.path.join(JOBS_DIR, jid + ".log")}
         with self.lock:
+            if any(row['project'] == project and row['status'] in ('queued', 'running') for row in self.jobs.values()):
+                raise HTTPException(409, '当前项目已有排队或运行中的任务，请等待完成。')
             self.jobs[jid] = j
             self._save(j)
         return j
@@ -443,11 +438,14 @@ class Jobs:
             if j["status"] == "queued":
                 j["status"] = "cancelled"
                 self._save(j)
-            elif j["status"] == "running" and self.proc is not None:
-                try:
-                    os.killpg(self.proc.pid, signal.SIGTERM)
-                except Exception:
-                    pass
+            elif j['status'] == 'running':
+                j['cancel_requested'] = True
+                self._save(j)
+                if self.proc is not None and j.get('pid') == self.proc.pid:
+                    try:
+                        os.killpg(self.proc.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
         return j
 
     def _argv(self, j):
@@ -492,6 +490,10 @@ class Jobs:
                 busy = any(j["status"] == "running" for j in self.jobs.values())
             if busy or not nxt:
                 continue
+            observed = task_monitor().snapshot([])
+            # Do not launch another heavy job while an external CLI task is observed.
+            if not observed['monitor']['available'] or any(t.get('source') == 'cli' and t.get('status') in ('running', 'unknown') for t in observed['tasks']):
+                continue
             j = min(nxt, key=lambda j: j["created"])
             try:
                 argv = self._argv(j)
@@ -501,12 +503,32 @@ class Jobs:
                 continue
             os.makedirs(os.path.join(PROJ, j["project"]), exist_ok=True)
             with self.lock:
+                if j['status'] != 'queued':
+                    continue
                 j["status"], j["started"], j["argv"] = "running", time.time(), argv
                 self._save(j)
-            with open(j["log"], "w") as logf:
-                self.proc = subprocess.Popen(argv, cwd=CODE, stdout=logf, stderr=subprocess.STDOUT,
-                                             start_new_session=True, env={**os.environ, "PYTHONUNBUFFERED": "1"})
-                rc = self.proc.wait()
+            try:
+                with open(j['log'], 'w') as logf:
+                    proc = subprocess.Popen(argv, cwd=CODE, stdout=logf, stderr=subprocess.STDOUT,
+                                            start_new_session=True, env={**os.environ, 'PYTHONUNBUFFERED': '1'})
+                    with self.lock:
+                        self.proc = proc
+                        j['pid'] = proc.pid
+                        j['process_start'] = read_process_identity(proc.pid)
+                        self._save(j)
+                        if j.get('cancel_requested'):
+                            try:
+                                os.killpg(proc.pid, signal.SIGTERM)
+                            except ProcessLookupError:
+                                pass
+                    rc = proc.wait()
+            except OSError as e:
+                with self.lock:
+                    j['status'], j['ended'], j['error'] = 'failed', time.time(), str(e)
+                    self.proc = None
+                    self._save(j)
+                continue
+            project_store().invalidate(j['project'])
             with self.lock:
                 j["rc"], j["ended"] = rc, time.time()
                 text = open(j["log"], errors="replace").read()[-12000:]
@@ -526,6 +548,30 @@ def jobs():
     return JOBS.list()[:60]
 
 
+@app.get('/api/tasks')
+def tasks():
+    return task_snapshot()
+
+
+@app.get('/api/tasks/{task_id}/log')
+def task_log(task_id: str, tail: int = 200):
+    if task_id.startswith('cli:'):
+        response = task_monitor().task_log(task_id, JOBS.list(), tail=max(1, min(tail, 1000)))
+        if response is None:
+            raise HTTPException(404, '任务不在当前观测记录中')
+        return response
+    response = task_monitor().task_log(task_id, JOBS.list(), tail=max(1, min(tail, 1000)))
+    if response is None:
+        raise HTTPException(404, '任务不存在')
+    return response
+
+
+@app.get('/api/capabilities')
+def capabilities():
+    return {'version': 2, 'unified_tasks': True, 'project_summary_cache': True,
+            'safe_retry': 'restore-inputs-with-new-output-name', 'cli_control': False}
+
+
 @app.post("/api/jobs")
 async def new_job(body: dict):
     project = safe_name(body.get("project", ""))
@@ -533,6 +579,12 @@ async def new_job(body: dict):
     if cmd not in ("pipeline", "prepare", "gen", "train", "exam", "animate", "stabilize"):
         raise HTTPException(400, "unknown cmd")
     args = body.get("args", {}) or {}
+    if not isinstance(args, dict):
+        raise HTTPException(400, 'args must be an object')
+    observed = task_snapshot()
+    if any(t.get('project') == project and t.get('status') in ('queued', 'running', 'unknown') for t in observed['tasks']):
+        raise HTTPException(409, '当前项目已有运行或排队任务，请先查看任务中心。')
+    args = dict(args)
     for k in ("model", "video"):
         if k in args and args[k]:
             base = INPUTS if k == "model" else VIDEOS
@@ -554,6 +606,8 @@ async def new_job(body: dict):
             raise HTTPException(409, "Project already contains a rig, trained reader, or training metadata; "
                                 "choose a new project name to avoid reusing an old model")
     if cmd == "animate":
+        if args.get('name'):
+            args['name'] = safe_name(args['name'])
         d = proj_dir(project)
         if not os.path.isfile(os.path.join(d, "model", "best.pt")):
             raise HTTPException(400, "Project has no trained reader (model/best.pt); train this project "
@@ -565,11 +619,14 @@ async def new_job(body: dict):
                                 "to proceed. Manual associations do not automatically verify video identity")
         if args.get("solver", "legacy") not in ("legacy", "temporal"):
             raise HTTPException(400, "Unknown solver")
-        if args.get("solver") == "temporal":
-            output_name = safe_name(args.get("name") or os.path.splitext(os.path.basename(args["video"]))[0] + "_temporal")
-            if os.path.isfile(os.path.join(PROJ,project,"out",output_name,"motion.npz")):
-                raise HTTPException(400, "Experimental output already exists; choose a new name")
-            args["name"] = output_name
+        default_name = os.path.splitext(os.path.basename(args['video']))[0]
+        output_name = safe_name(args.get('name') or default_name + ('_temporal' if args.get('solver') == 'temporal' else ''))
+        output_exists = os.path.exists(os.path.join(PROJ, project, 'out', output_name))
+        if output_exists and args.get('solver') == 'temporal':
+            raise HTTPException(409, '实验结果名称已存在，请使用新名称。')
+        if output_exists and args.get('overwrite') is not True:
+            raise HTTPException(409, '结果名称已存在。请使用新名称保留旧结果，或明确确认覆盖。')
+        args['name'] = output_name
     if cmd not in ("pipeline", "prepare"):
         proj_dir(project)
     if cmd == "stabilize":
@@ -601,12 +658,8 @@ def job_log(jid: str, tail: int = 200):
     j = {x["id"]: x for x in JOBS.list()}.get(jid)
     if not j:
         raise HTTPException(404)
-    if not os.path.exists(j["log"]):
-        return {"lines": []}
-    with open(j["log"], errors="ignore") as f:
-        lines = f.read().splitlines()
-    lines = [l for l in lines if not l.startswith(("Fra:", "libpng"))]
-    return {"lines": lines[-tail:]}
+    result = bounded_log_tail(j['log'], tail=max(1, min(tail, 1000)))
+    return {'lines': result['lines'] if result else []}
 
 
 @app.get("/api/project-log/{p}/{which}")
@@ -615,10 +668,8 @@ def project_log(p: str, which: str, tail: int = 120):
     if which not in ("gen", "train", "exam", "prepare", "run_all"):
         raise HTTPException(400)
     f = os.path.join(d, which + ".log")
-    if not os.path.exists(f):
-        return {"lines": []}
-    lines = [l for l in open(f, errors="ignore").read().splitlines() if not l.startswith(("Fra:", "libpng"))]
-    return {"lines": lines[-tail:]}
+    result = bounded_log_tail(f, tail=max(1, min(tail, 1000)))
+    return {'lines': result['lines'] if result else []}
 
 
 # ----------------------------------------------------------------------------- system
