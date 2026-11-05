@@ -23,7 +23,7 @@ studio = load_json(os.path.join(project, "studio.json"))
 popt = load_json(os.path.join(project, "prepare_opts.json")) if os.path.exists(
     os.path.join(project, "prepare_opts.json")) else {}
 arm, meshes = load_model(rig["model"], procedural_material=True if popt.get("procedural_material") else None,
-                         up=popt.get("up", "+Z"))
+                         up=popt.get("up", "+Z"), drop_props=bool(popt.get("drop_props")))
 check_world_matrix(arm, rig)
 mot = np.load(motion_path)
 G, Q = mot["G"], mot["quat"]

@@ -1,0 +1,176 @@
+{
+ "per_mesh": {
+  "11101": {
+   "samples": 786,
+   "prop": false,
+   "ref_visible": 0.26653944020356235
+  },
+  "11101_01": {
+   "samples": 1681,
+   "prop": false,
+   "ref_visible": 0.10354352567915923
+  },
+  "11101_eye": {
+   "samples": 1,
+   "prop": false,
+   "ref_visible": 0.7466666666666667
+  },
+  "11101_eyelash": {
+   "samples": 1,
+   "prop": false,
+   "ref_visible": 0.17
+  },
+  "11101_feature": {
+   "samples": 139,
+   "prop": false,
+   "ref_visible": 0.0871462829736211
+  },
+  "22101": {
+   "samples": 152,
+   "prop": true,
+   "ref_visible": 0.04335526315789474
+  },
+  "25101": {
+   "samples": 240,
+   "prop": true,
+   "ref_visible": 0.08091666666666666
+  },
+  "mesh_input": {
+   "samples": 0,
+   "prop": true,
+   "ref_visible": null
+  },
+  "mesh_input_ke": {
+   "samples": 0,
+   "prop": true,
+   "ref_visible": null
+  }
+ },
+ "frames": 150,
+ "verts": 27906,
+ "tris": 53598,
+ "prop_tri_fraction": 0.136460315683421,
+ "visibility_vs_blender": {
+  "open3d": {
+   "accuracy": 0.9999977777777778,
+   "false_visible_of_hidden": 1.2932913099877009e-06,
+   "false_hidden_of_visible": 7.88774166068513e-06,
+   "n": 900000
+  },
+  "zb_cell4_nb1_samples_tol10": {
+   "accuracy": 0.4845088888888889,
+   "false_visible_of_hidden": 0.5959279429813727,
+   "false_hidden_of_visible": 0.02490948816444364,
+   "n": 900000
+  },
+  "zb_cell4_nb1_samples_tol30": {
+   "accuracy": 0.41566444444444445,
+   "false_visible_of_hidden": 0.6787166928989254,
+   "false_hidden_of_visible": 0.008708066793396382,
+   "n": 900000
+  },
+  "zb_cell4_nb1_samples+verts_tol10": {
+   "accuracy": 0.8302211111111111,
+   "false_visible_of_hidden": 0.17415978096818374,
+   "false_hidden_of_visible": 0.1430599704998462,
+   "n": 900000
+  },
+  "zb_cell4_nb1_samples+verts_tol30": {
+   "accuracy": 0.7351511111111111,
+   "false_visible_of_hidden": 0.3011183089957464,
+   "false_hidden_of_visible": 0.04364287460857082,
+   "n": 900000
+  },
+  "zb_cell4_nb3_samples_tol10": {
+   "accuracy": 0.8669155555555556,
+   "false_visible_of_hidden": 0.11678161870926941,
+   "false_hidden_of_visible": 0.23251484867367625,
+   "n": 900000
+  },
+  "zb_cell4_nb3_samples_tol30": {
+   "accuracy": 0.7855744444444445,
+   "false_visible_of_hidden": 0.23348693323124953,
+   "false_hidden_of_visible": 0.09817083270888712,
+   "n": 900000
+  },
+  "zb_cell4_nb3_samples+verts_tol10": {
+   "accuracy": 0.9077044444444444,
+   "false_visible_of_hidden": 0.015068137052666701,
+   "false_hidden_of_visible": 0.5633030706978285,
+   "n": 900000
+  },
+  "zb_cell4_nb3_samples+verts_tol30": {
+   "accuracy": 0.8827888888888888,
+   "false_visible_of_hidden": 0.09944763528150426,
+   "false_hidden_of_visible": 0.22554997278729128,
+   "n": 900000
+  },
+  "zb_cell8_nb1_samples_tol10": {
+   "accuracy": 0.7606988888888889,
+   "false_visible_of_hidden": 0.25977307910674957,
+   "false_hidden_of_visible": 0.11444324375488055,
+   "n": 900000
+  },
+  "zb_cell8_nb1_samples_tol30": {
+   "accuracy": 0.6666177777777778,
+   "false_visible_of_hidden": 0.38030782919760325,
+   "false_hidden_of_visible": 0.047184470614218446,
+   "n": 900000
+  },
+  "zb_cell8_nb1_samples+verts_tol10": {
+   "accuracy": 0.9116111111111111,
+   "false_visible_of_hidden": 0.04396285150041191,
+   "false_hidden_of_visible": 0.3593418468358324,
+   "n": 900000
+  },
+  "zb_cell8_nb1_samples+verts_tol30": {
+   "accuracy": 0.8509088888888889,
+   "false_visible_of_hidden": 0.15197078196272476,
+   "false_hidden_of_visible": 0.13152809219192452,
+   "n": 900000
+  },
+  "zb_cell8_nb3_samples_tol10": {
+   "accuracy": 0.9001566666666667,
+   "false_visible_of_hidden": 0.01975373146875214,
+   "false_hidden_of_visible": 0.5883072117622004,
+   "n": 900000
+  },
+  "zb_cell8_nb3_samples_tol30": {
+   "accuracy": 0.8758566666666666,
+   "false_visible_of_hidden": 0.09378948580030806,
+   "false_hidden_of_visible": 0.3092704627738032,
+   "n": 900000
+  },
+  "zb_cell8_nb3_samples+verts_tol10": {
+   "accuracy": 0.88094,
+   "false_visible_of_hidden": 0.0031064857265904575,
+   "false_hidden_of_visible": 0.8262567144400886,
+   "n": 900000
+  },
+  "zb_cell8_nb3_samples+verts_tol30": {
+   "accuracy": 0.8903722222222222,
+   "false_visible_of_hidden": 0.050178409536212804,
+   "false_hidden_of_visible": 0.472207542258576,
+   "n": 900000
+  }
+ },
+ "ref_visible_fraction": 0.14086555555555555,
+ "sharp_vs_alpha": {
+  "iou_mean": 0.9943782484890267,
+  "iou_min": 0.8599545902177481,
+  "iou_p5": 0.9806150752628152,
+  "frac_iou_below_0.95": 0.013333333333333334,
+  "boundary_px_mean": 0.20433495016768574,
+  "soft_band_over_area_mean": 0.10113280912300068,
+  "soft_band_over_area_max": 1.0438783174762143,
+  "iou_vs_alpha_any_coverage_mean": 0.9552428455781925
+ },
+ "depth_check_median_err_of_size": 0.0005684145233522066,
+ "body_vs_full_area": 0.9565930716423502,
+ "timing_ms_per_frame": {
+  "scene_build_and_6000_rays_ms": 14.935493469238281,
+  "full_res_silhouettes_2views_ms": 6.080985069274902,
+  "quarter_res_silhouettes_2views_ms": 1.1576414108276367,
+  "zbuffer_ms": 1.0896772146224976
+ }
+}

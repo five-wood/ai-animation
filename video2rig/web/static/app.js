@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { initRunPage } from "/static/run-page.js?v=up-axis-1";
+import { initRunPage } from "/static/run-page.js?v=drop-props-1";
 
 const $ = (s) => document.querySelector(s);
 const api = async (u, opt) => {

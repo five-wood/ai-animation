@@ -31,7 +31,7 @@ studio = load_json(os.path.join(workdir, "studio.json"))
 popt = load_json(os.path.join(workdir, "prepare_opts.json")) if os.path.exists(
     os.path.join(workdir, "prepare_opts.json")) else {}
 arm, meshes = load_model(rig["model"], procedural_material=True if popt.get("procedural_material") else None,
-                         up=popt.get("up", "+Z"))
+                         up=popt.get("up", "+Z"), drop_props=bool(popt.get("drop_props")))
 assert len(arm.data.bones) == len(rig["bones"]), "rig.json does not match the model"
 check_world_matrix(arm, rig)
 

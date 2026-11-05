@@ -119,6 +119,9 @@ $PY -m v2r.cli inspect /data/video2rig/inputs/11101_01.fbx    # armature? skinne
 $PY -m v2r.cli prepare /data/video2rig/inputs/11101_01.fbx ../projects/m11101 --facing=-Y
 #    --facing: (write it as --facing=-Y; "--facing -Y" is rejected by argparse) the direction the creature looks in the model (Blender axes, default -Y = Blender "front")
 #    --procedural-material: use this if the textures are missing (avoids pink renders)
+#    props (meshes on their own root bone, e.g. m11101's guns) are removed by default: not in the reference
+#                  picture, no keypoints, not exported; bones unchanged.  --no-drop-props keeps them.
+#                  Projects prepared before this default keep their props (no "drop_props" in prepare_opts.json).
 #    --limits limits.json: per-bone limits {"regex": [[xmin,xmax],[ymin,ymax],[zmin,zmax]]} in degrees
 #    --min-seg 0.06: bones whose whole subtree stays within 6% of the body size (fingers, ears)
 #                    are folded into their parent ("folds the fingers into the hand")

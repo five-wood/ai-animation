@@ -17,7 +17,7 @@ opt = json.loads(args[2]) if len(args) > 2 else {}
 os.makedirs(outdir, exist_ok=True)
 
 arm, meshes = load_model(model, procedural_material=True if opt.get("procedural_material") else None,
-                         up=opt.get("up", "+Z"))
+                         up=opt.get("up", "+Z"), drop_props=bool(opt.get("drop_props")))
 rig = extract_rig(arm, meshes, facing=opt.get("facing", "-Y"),
                   exclude=opt.get("exclude", DEFAULT_EXCLUDE),
                   merge_frac=opt.get("merge_frac", 0.015),

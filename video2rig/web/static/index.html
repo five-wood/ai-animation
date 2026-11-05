@@ -143,6 +143,7 @@
           <label>头顶朝向 <select id="newUp" title="模型导入后头顶指向的轴；参考图里模型是躺着的就改这里"><option value="+Z">+Z（默认，已站立）</option><option>-Y</option><option>+Y</option><option>-X</option><option>+X</option><option>-Z</option></select></label>
           <label>摄影棚 <select id="newProfile"><option value="legacy">旧版摄影棚（默认）</option><option value="soft-clean">实验：柔光无地影（尚无精度收益，需配套训练）</option></select></label>
           <label><input type="checkbox" id="newProc"> 贴图缺失时用程序材质</label>
+          <label title="挂在独立根骨骼上的道具（如 m11101 的枪）不渲染、不设关键点、不导出；骨骼不变"><input type="checkbox" id="newDropProps" checked> 移除独立道具（枪等）</label>
           <button id="newRun" class="primary">开始</button>
         </div>
         <hr style="border:0;border-top:1px solid var(--line);margin:22px 0">
@@ -180,6 +181,6 @@
     </div>
   </section>
 </main>
-<script type="module" src="/static/app.js?v=limb-metric-1"></script>
+<script type="module" src="/static/app.js?v=drop-props-1"></script>
 </body>
 </html>

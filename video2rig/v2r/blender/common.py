@@ -161,13 +161,47 @@ def rebind_bone_parented_skins(arm, meshes):
         print(f"[v2r] rebind {o.name}: was bone-parented without skinning; {note}; armature modifier added")
 
 
-def load_model(path, procedural_material=None, up="+Z"):
+def prop_meshes(arm, meshes):
+    """Meshes of a separate prop rig (m11101's two guns): every bone that carries the mesh - its weighted
+    vertex groups, or the bone it is rigidly parented to - hangs under a root bone other than the main
+    skeleton's root (the root with the most bones).  A prop skinned to the creature's own hand belongs to the
+    body chain and is not detected."""
+    bones = arm.data.bones
+
+    def top(b):
+        while b.parent is not None:
+            b = b.parent
+        return b.name
+
+    roots = [b for b in bones if b.parent is None]
+    main = max(roots, key=lambda r: len(r.children_recursive)).name
+    out = []
+    for m in meshes:
+        used = set()
+        if m.parent_type == "BONE" and m.parent_bone in bones:
+            used.add(m.parent_bone)
+        gname = {g.index: g.name for g in m.vertex_groups}
+        for v in m.data.vertices:
+            for g in v.groups:
+                n = gname.get(g.group)
+                if g.weight > 1e-4 and n in bones:
+                    used.add(n)
+        if used and all(top(bones[n]) != main for n in used):
+            out.append(m)
+    return out
+
+
+def load_model(path, procedural_material=None, up="+Z", drop_props=False):
     """Import FBX/GLB/BLEND, keep only the main armature and its meshes, rest pose.
 
     up: model axis that points up after import.  Anything other than +Z rotates the
     top-level objects (object transform only; bone data is untouched) so the creature
     stands on the Blender ground plane.  Every script that reloads the model for a
-    project must pass the same value (stored in prepare_opts.json)."""
+    project must pass the same value (stored in prepare_opts.json).
+
+    drop_props: also delete the prop meshes found by prop_meshes() (a gun with its own root bone): they are
+    not rendered, carry no keypoints and are not exported.  Every bone stays (the exported skeleton is
+    unchanged).  Like `up`, every script must pass the project's value (prepare_opts.json)."""
     path = os.path.abspath(path)
     ext = os.path.splitext(path)[1].lower()
     if ext == ".blend":
@@ -205,6 +239,16 @@ def load_model(path, procedural_material=None, up="+Z"):
         if o is not arm and o not in meshes:
             bpy.data.objects.remove(o, do_unlink=True)
     rebind_bone_parented_skins(arm, meshes)
+    if drop_props:  # after the rebind: a rebound skin is judged by its vertex weights, not its old parent bone
+        props = prop_meshes(arm, meshes)
+        if props:
+            print(f"[v2r] props dropped (own root bone, not part of the creature): "
+                  f"{', '.join(sorted(o.name for o in props))}")
+        meshes = [o for o in meshes if o not in props]
+        if not meshes:
+            raise SystemExit("NO_SKINNED_MESH: every mesh bound to the armature is a prop")
+        for o in props:
+            bpy.data.objects.remove(o, do_unlink=True)
     for o in [arm] + meshes:
         o.hide_render = False
         o.hide_viewport = False

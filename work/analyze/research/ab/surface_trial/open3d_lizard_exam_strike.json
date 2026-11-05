@@ -1,0 +1,136 @@
+{
+ "per_mesh": {
+  "monster_body": {
+   "samples": 3000,
+   "prop": false,
+   "ref_visible": 0.3871688888888889
+  }
+ },
+ "frames": 150,
+ "verts": 4112,
+ "tris": 8208,
+ "prop_tri_fraction": 0.0,
+ "visibility_vs_blender": {
+  "open3d": {
+   "accuracy": 0.9999955555555555,
+   "false_visible_of_hidden": 5.439236476245041e-06,
+   "false_hidden_of_visible": 2.8698357306027802e-06,
+   "n": 900000
+  },
+  "zb_cell4_nb1_samples_tol10": {
+   "accuracy": 0.7607033333333333,
+   "false_visible_of_hidden": 0.325543742339742,
+   "false_hidden_of_visible": 0.10278029685580797,
+   "n": 900000
+  },
+  "zb_cell4_nb1_samples_tol30": {
+   "accuracy": 0.7059577777777778,
+   "false_visible_of_hidden": 0.46194528853336425,
+   "false_hidden_of_visible": 0.028276491453629194,
+   "n": 900000
+  },
+  "zb_cell4_nb1_samples+verts_tol10": {
+   "accuracy": 0.8543711111111111,
+   "false_visible_of_hidden": 0.14061876754153763,
+   "false_hidden_of_visible": 0.15355917027309357,
+   "n": 900000
+  },
+  "zb_cell4_nb1_samples+verts_tol30": {
+   "accuracy": 0.7947177777777777,
+   "false_visible_of_hidden": 0.3104661788275907,
+   "false_hidden_of_visible": 0.03879156957055778,
+   "n": 900000
+  },
+  "zb_cell4_nb3_samples_tol10": {
+   "accuracy": 0.8028566666666667,
+   "false_visible_of_hidden": 0.0070347458426102535,
+   "false_hidden_of_visible": 0.4980571212103819,
+   "n": 900000
+  },
+  "zb_cell4_nb3_samples_tol30": {
+   "accuracy": 0.8651922222222223,
+   "false_visible_of_hidden": 0.11481140354058034,
+   "false_hidden_of_visible": 0.16645908188215305,
+   "n": 900000
+  },
+  "zb_cell4_nb3_samples+verts_tol10": {
+   "accuracy": 0.7712833333333333,
+   "false_visible_of_hidden": 0.0008630255208975466,
+   "false_hidden_of_visible": 0.5893752941581624,
+   "n": 900000
+  },
+  "zb_cell4_nb3_samples+verts_tol30": {
+   "accuracy": 0.8720377777777778,
+   "false_visible_of_hidden": 0.08849637746850682,
+   "false_hidden_of_visible": 0.19043081973987808,
+   "n": 900000
+  },
+  "zb_cell8_nb1_samples_tol10": {
+   "accuracy": 0.8475755555555555,
+   "false_visible_of_hidden": 0.05880721170233597,
+   "false_hidden_of_visible": 0.3006066832734494,
+   "n": 900000
+  },
+  "zb_cell8_nb1_samples_tol30": {
+   "accuracy": 0.8445511111111111,
+   "false_visible_of_hidden": 0.19299136249247573,
+   "false_hidden_of_visible": 0.09602470354596902,
+   "n": 900000
+  },
+  "zb_cell8_nb1_samples+verts_tol10": {
+   "accuracy": 0.8435144444444445,
+   "false_visible_of_hidden": 0.014107566340554222,
+   "false_hidden_of_visible": 0.38184886297108356,
+   "n": 900000
+  },
+  "zb_cell8_nb1_samples+verts_tol30": {
+   "accuracy": 0.8722077777777778,
+   "false_visible_of_hidden": 0.13678229274695947,
+   "false_hidden_of_visible": 0.11356226969568262,
+   "n": 900000
+  },
+  "zb_cell8_nb3_samples_tol10": {
+   "accuracy": 0.6970166666666666,
+   "false_visible_of_hidden": 0.0007234184513405905,
+   "false_hidden_of_visible": 0.7814160917429086,
+   "n": 900000
+  },
+  "zb_cell8_nb3_samples_tol30": {
+   "accuracy": 0.8136088888888889,
+   "false_visible_of_hidden": 0.055574492156621004,
+   "false_hidden_of_visible": 0.3934544786656412,
+   "n": 900000
+  },
+  "zb_cell8_nb3_samples+verts_tol10": {
+   "accuracy": 0.6819088888888889,
+   "false_visible_of_hidden": 0.0003245411097492875,
+   "false_hidden_of_visible": 0.8210686120326472,
+   "n": 900000
+  },
+  "zb_cell8_nb3_samples+verts_tol30": {
+   "accuracy": 0.8081455555555556,
+   "false_visible_of_hidden": 0.04558624090740969,
+   "false_hidden_of_visible": 0.42337538599290575,
+   "n": 900000
+  }
+ },
+ "ref_visible_fraction": 0.3871688888888889,
+ "sharp_vs_alpha": {
+  "iou_mean": 0.9698049132147443,
+  "iou_min": 0.7491997439180538,
+  "iou_p5": 0.8359360804068001,
+  "frac_iou_below_0.95": 0.19333333333333333,
+  "boundary_px_mean": 0.4831373082846403,
+  "soft_band_over_area_mean": 0.14628891056526513,
+  "soft_band_over_area_max": 0.49774116396492163,
+  "iou_vs_alpha_any_coverage_mean": 0.9284380353180489
+ },
+ "depth_check_median_err_of_size": 0.0006063860653516884,
+ "body_vs_full_area": 1.0,
+ "timing_ms_per_frame": {
+  "scene_build_and_6000_rays_ms": 3.199458122253418,
+  "full_res_silhouettes_2views_ms": 4.901409149169922,
+  "quarter_res_silhouettes_2views_ms": 0.922083854675293,
+  "zbuffer_ms": 0.5040466785430908
+ }
+}

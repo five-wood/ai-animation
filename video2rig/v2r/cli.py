@@ -1,6 +1,6 @@
 """video2rig command line.
 
-  python -m v2r.cli prepare  <model.fbx|glb> <project> [--facing=-Y] [--up=+Z] [--procedural-material]
+  python -m v2r.cli prepare  <model.fbx|glb> <project> [--facing=-Y] [--up=+Z] [--procedural-material] [--no-drop-props]
   python -m v2r.cli gen      <project> [--n 3000] [--workers 8]
   python -m v2r.cli train    <project> [--epochs 40]
   python -m v2r.cli exam     <project> [--frames 150] [--seed 7]
@@ -36,12 +36,25 @@ def run_blender(script, *args, log=None, quiet=True):
     return r
 
 
+def resolve_drop_props(flag, geometry_from):
+    """--drop-props is on by default for a new project.  With --geometry-from the rig comes from the template
+    project, so unless the flag is given explicitly the template's own setting is used (a template without
+    the key was prepared with its props)."""
+    if flag is not None:
+        return bool(flag)
+    if geometry_from:
+        p = os.path.join(geometry_from, "prepare_opts.json")
+        return bool(json.load(open(p)).get("drop_props")) if os.path.exists(p) else False
+    return True
+
+
 def cmd_prepare(a):
+    a.drop_props = resolve_drop_props(a.drop_props, a.geometry_from)
     opt = {"facing": a.facing, "up": a.up, "procedural_material": a.procedural_material, "fill": a.fill,
            "panel_w": a.panel_w, "panel_h": a.panel_h, "min_seg_frac": a.min_seg, "keep_bones": a.keep_bones,
            "visual_profile": a.visual_profile, "geometry_from": a.geometry_from,
            "limits_mode": "generic" if a.generic_limits else "anatomical",
-           "fist_points": a.fist_points, "offaxis_points": a.offaxis_points}
+           "fist_points": a.fist_points, "offaxis_points": a.offaxis_points, "drop_props": a.drop_props}
     if a.limits:
         opt["limits"] = json.load(open(a.limits))
     os.makedirs(a.project, exist_ok=True)
@@ -155,6 +168,10 @@ def main(argv=None):
                    help="a closed hand keeps its wrist point and one knuckle point instead of every finger point")
     s.add_argument("--offaxis-points", action="store_true",
                    help="two skin points off the bone's line on each hand and on the head (shows their twist)")
+    s.add_argument("--drop-props", action=argparse.BooleanOptionalAction, default=None,
+                   help="remove meshes that ride on their own root bone (a gun that is not skinned to the hand): "
+                        "not rendered, no keypoints, not exported; the skeleton is unchanged.  On by default; "
+                        "--no-drop-props keeps them (with --geometry-from the template's setting is the default)")
     s.add_argument("--fill", type=float, default=0.68)
     s.add_argument("--min-seg", type=float, default=0.06,
                    help="bones shorter than this fraction of the body size are folded into their parent")

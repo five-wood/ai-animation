@@ -20,7 +20,7 @@ let loadSequence = 0;
 let lastVideoURL = '';
 let latestRefresh = 0;
 function remember() {
-  const fields=['newName','newModel','newFacing','newUp','newProfile','newProc','aniProject','aniVideo','aniName','aniSolver','aniSwap','aniForce'];
+  const fields=['newName','newModel','newFacing','newUp','newProfile','newProc','newDropProps','aniProject','aniVideo','aniName','aniSolver','aniSwap','aniForce'];
   for (const id of fields) {
     const el=$('#'+id); if (el) saved[id]=el.type==='checkbox'?el.checked:el.value;
   }
@@ -114,7 +114,7 @@ async function refresh({current,force=false}={}) {
   fill($('#aniProject'),projects.map(p=>({value:p.name,label:`${p.name} · ${p.visual_profile==='soft-clean'?'柔光无影':'旧版'} · ${p.model_name||basename(p.model)||'无模型'}${p.has_reader?'':' · 未训练'}`})),preferredProject,'请选择用于本视频的项目 / 识别器');
   fill($('#aniVideo'),[...inputs.videos].sort((a,b)=>b.mtime-a.mtime).map(v=>({value:v.name,label:`${v.name} · ${v.project?'关联 '+v.project:'未关联'} · ${bytes(v.size)}`})),initial?saved.aniVideo:$('#aniVideo').value,'请选择已上传的视频');
   if(initial) {
-    for(const id of ['newName','newFacing','newUp','newProfile','newProc','aniName','aniSolver','aniSwap','aniForce']) {
+    for(const id of ['newName','newFacing','newUp','newProfile','newProc','newDropProps','aniName','aniSolver','aniSwap','aniForce']) {
       const el=$('#'+id);if(saved[id]!==undefined) {if(el.type==='checkbox')el.checked=!!saved[id];else el.value=saved[id];}
     }
     initialized=true;
@@ -177,13 +177,14 @@ async function submitNew() {
   if(!confirm(`新建 / 准备项目：${n}\n模型：${model}\n将生成训练图、训练识别器并考试。\n这不会自动改变“视频生成动画”的目标项目。`))return;
   const extra=['--facing='+$('#newFacing').value,'--up='+$('#newUp').value,'--visual-profile',$('#newProfile').value];
   if($('#newProc').checked)extra.push('--procedural-material');
+  extra.push($('#newDropProps').checked?'--drop-props':'--no-drop-props');
   busy=true;summary();
   try {const j=await opts.submit(n,'pipeline',{model,extra});if(j)notice(`项目任务已提交：${n}。训练完成后，请在下方选择此项目。`,'success');}
   finally{busy=false;summary();}
 }
 export function initRunPage(options) {
   opts=options;
-  const fields=['newName','newModel','newFacing','newUp','newProfile','newProc','aniName','aniSolver','aniSwap','aniForce'];
+  const fields=['newName','newModel','newFacing','newUp','newProfile','newProc','newDropProps','aniName','aniSolver','aniSwap','aniForce'];
   fields.forEach(id=>$('#'+id).addEventListener('change',()=>{remember();summary();}));
   fields.filter(id=>$('#'+id).tagName==='INPUT').forEach(id=>$('#'+id).addEventListener('input',remember));
   $('#aniProject').addEventListener('change',()=>setProject($('#aniProject').value,true));

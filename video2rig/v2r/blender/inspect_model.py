@@ -31,6 +31,11 @@ for a in arms:
     print(f"[v2r] {a.name} action: {act.name if act else None} {tuple(act.frame_range) if act else ''}")
     roots = [b.name for b in a.data.bones if b.parent is None]
     print(f"[v2r] roots: {roots}")
+if arms:
+    arm = max(arms, key=lambda a: len(a.data.bones))
+    props = prop_meshes(arm, [m for m in meshes if m.vertex_groups or m.parent_type == "BONE"])
+    if props:
+        print(f"[v2r] props on their own root bone: {[m.name for m in props]} -> prepare --drop-props removes them")
 if not arms:
     print("[v2r] NO ARMATURE -> rig it first (UniRig, see README)")
 elif any(i.size[0] == 0 for i in bpy.data.images):
