@@ -256,8 +256,15 @@ class PoseViews(Dataset):
     """One item = one camera view of one random pose."""
 
     def __init__(self, project, split="train", val_frac=0.05, target_w=448, hm_stride=3.5, seed=0,
-                 smear_frac=0.0):
+                 smear_frac=0.0, dense=False):
+        """dense: also return the dense correspondence labels (v2r.dense_labels) on the heatmap grid."""
         self.dir = os.path.join(project, "train_data")
+        self.dense = bool(dense)
+        if self.dense:
+            dm = os.path.join(self.dir, "dense_meta.json")
+            if not os.path.exists(dm):
+                raise FileNotFoundError("dense labels missing: run python -m v2r.dense_labels first")
+            self.dense_step = json.load(open(dm))["step"]
         self.rig = json.load(open(os.path.join(project, "rig.json")))
         self.studio = json.load(open(os.path.join(project, "studio.json")))
         opts_path = os.path.join(project, "prepare_opts.json")
@@ -301,10 +308,12 @@ class PoseViews(Dataset):
         uvz = np.array(rec[vn]["uvz"], np.float32)
         vis = np.array(rec[vn]["vis"], np.float32)
         uv = uvz[:, :2].copy()
+        A = np.float32([[1, 0, 0], [0, 1, 0]])  # panel -> augmented panel
         if self.train and rng.random() < 0.85:
             M = random_affine(self.pw, self.ph, rng)
             rgba = cv2.warpAffine(rgba, M, (self.pw, self.ph), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
             uv = uv @ M[:, :2].T + M[:, 2]
+            A = M.astype(np.float32)
         smear = (uv, self.limb_segments, self.smear_frac) if (self.train and self.smear_frac > 0) else None
         img = compose(rgba, rng, self.train, profile=self.visual_profile, smear=smear)
         full = (rng.random() < self.full_frac) if self.train else (i % 4 == 0)
@@ -326,7 +335,7 @@ class PoseViews(Dataset):
         inside = (uv_net[:, 0] >= 0) & (uv_net[:, 0] < self.W) & (uv_net[:, 1] >= 0) & (uv_net[:, 1] < self.H)
         z = uvz[:, 2]
         depth = (z - z.mean()) / self.size  # relative depth, view independent definition
-        return {
+        out = {
             "img": to_tensor(img),
             "uv": torch.from_numpy(uv_net.astype(np.float32)),  # in net-input pixels
             "inside": torch.from_numpy(inside.astype(np.float32)),
@@ -335,3 +344,30 @@ class PoseViews(Dataset):
             "view": v,
             "px_scale": float(1.0 / M[0, 0]),  # net px -> panel px
         }
+        if self.dense:
+            coord, mask = self.dense_on_heat_grid(rec["id"], v, A, M)
+            out["dense_coord"] = torch.from_numpy(coord)
+            out["dense_mask"] = torch.from_numpy(mask)
+            out["dense_fast"] = float(bool(rec.get("fast")))
+        return out
+
+    def dense_on_heat_grid(self, rid, v, A, M):
+        """Labels of panel pixels (grid step s, centres at s*(j+.5)) resampled onto the heatmap grid of the
+        net input: heat cell centre -> net px -> augmented panel px (inverse of M) -> panel px (inverse of A) ->
+        label grid index; nearest label cell.  Returns coord (3,hh,hw) float32 and mask (hh,hw) float32."""
+        z = np.load(os.path.join(self.dir, f"dense_{rid:06d}.npz"))
+        c, m = z["coord"][v].astype(np.float32), z["mask"][v]
+        s = self.dense_step
+        sx, sy = self.W / self.hw, self.H / self.hh
+        gx, gy = np.meshgrid((np.arange(self.hw) + 0.5) * sx, (np.arange(self.hh) + 0.5) * sy)
+        P = np.stack([gx.ravel(), gy.ravel(), np.ones(gx.size)], 0)  # net px
+        Mi = cv2.invertAffineTransform(M)
+        Ai = cv2.invertAffineTransform(A)
+        q = Ai @ np.vstack([Mi @ P, np.ones((1, P.shape[1]))])  # panel px
+        ix = np.floor(q[0] / s).astype(int)
+        iy = np.floor(q[1] / s).astype(int)
+        ok = (ix >= 0) & (ix < m.shape[1]) & (iy >= 0) & (iy < m.shape[0])
+        ixc, iyc = np.clip(ix, 0, m.shape[1] - 1), np.clip(iy, 0, m.shape[0] - 1)
+        mask = (m[iyc, ixc] & ok).reshape(self.hh, self.hw)
+        coord = c[iyc, ixc].reshape(self.hh, self.hw, 3) * mask[..., None]
+        return np.ascontiguousarray(coord.transpose(2, 0, 1)), mask.astype(np.float32)

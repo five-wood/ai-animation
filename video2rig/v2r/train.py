@@ -12,24 +12,73 @@ from v2r.data import PoseViews
 from v2r.model import JointReader, gaussian_targets, decode
 
 
+def dense_loss(dn, coord, mask, fast=None):
+    """dn (B,5,h,w): xyz, foreground logit, log-scale.  coord (B,3,h,w) rest-pose surface coordinates (-1..1),
+    mask (B,h,w) creature pixels.  Foreground: BCE on every cell.  Coordinates: Laplace negative log-likelihood
+    with the predicted per-pixel scale (the reader learns where it is unsure, e.g. motion blur), creature cells
+    only; pictures rendered with motion blur (fast) count half.  Returns (fg, coord) losses and the median
+    coordinate error (body-box units) for logging."""
+    xyz, fg, ls = dn[:, :3], dn[:, 3], dn[:, 4].clamp(-6, 3)
+    l_fg = F.binary_cross_entropy_with_logits(fg, mask)
+    w = mask if fast is None else mask * (1 - 0.5 * fast[:, None, None])
+    err = (xyz - coord).abs().sum(1)
+    nll = err * torch.exp(-ls) + ls
+    l_c = (nll * w).sum() / w.sum().clamp(min=1)
+    med = err[mask > 0].median() if (mask > 0).any() else err.new_zeros(())
+    return l_fg, l_c, med
+
+
 def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dinov2.lvd142m", img=448,
-          workers=12, sigma=2.0, device="cuda", steps=None, hidden_empty=False, smear_frac=0.0):
+          workers=12, sigma=2.0, device="cuda", steps=None, hidden_empty=False, smear_frac=0.0, dense=0.0,
+          dense_from=None):
     """steps: total optimiser steps (overrides epochs; the run ends after exactly that many).
     hidden_empty: keypoints hidden by the body in a view (vis = 0 in the labels) get an EMPTY target
     heatmap instead of a peak, so the reader learns to report low confidence there rather than a
     confident guess; depth is still trained at their true place.  smear_frac: share of training pictures
-    with a limb smeared into a see-through streak (data.smear_segment).  Defaults keep the old behaviour."""
+    with a limb smeared into a see-through streak (data.smear_segment).  dense > 0: also train the dense
+    correspondence head (labels from v2r.dense_labels) with this loss weight.
+    dense_from: path of a trained keypoint reader (best.pt).  Two-step training: the reader is loaded and
+    everything it has (backbone, keypoint and depth heads) is FROZEN; only a new dense head is trained, so the
+    keypoints read exactly as before.  Implies dense > 0.  Defaults keep the old behaviour."""
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
-    tr = PoseViews(project, "train", target_w=img, smear_frac=smear_frac)
-    va = PoseViews(project, "val", target_w=img)
+    if dense_from and dense <= 0:
+        dense = 1.0
+    use_dense = dense > 0
+    tr = PoseViews(project, "train", target_w=img, smear_frac=smear_frac, dense=use_dense)
+    va = PoseViews(project, "val", target_w=img, dense=use_dense)
     K = tr.K
-    print(f"[v2r] train items={len(tr)} val items={len(va)} K={K} net={tr.W}x{tr.H} heat={tr.hw}x{tr.hh}")
-    model = JointReader(K, n_views=len(tr.views), backbone=backbone, img_size=(tr.H, tr.W)).to(device)
-    bb_params = list(model.backbone.parameters())
-    head_params = [p for n, p in model.named_parameters() if not n.startswith("backbone.")]
-    opt = torch.optim.AdamW([{"params": bb_params, "lr": lr * 0.1}, {"params": head_params, "lr": lr}],
-                            weight_decay=0.03)
+    print(f"[v2r] train items={len(tr)} val items={len(va)} K={K} net={tr.W}x{tr.H} heat={tr.hw}x{tr.hh}"
+          + (f" dense head weight {dense}" if use_dense else ""))
+    base = None
+    if dense_from:
+        base = torch.load(dense_from, map_location="cpu", weights_only=False)
+        if base["K"] != K or list(base["net_wh"]) != [tr.W, tr.H] or base.get("dense"):
+            raise ValueError("dense_from must be a keypoint-only reader of this project (same keypoints and size)")
+        backbone = base["backbone"]
+    model = JointReader(K, n_views=len(tr.views), backbone=backbone, img_size=(tr.H, tr.W), dense=use_dense,
+                        pretrained=base is None, dense_decoder=base is not None).to(device)
+    DENSE_PARTS = ("dn.", "dproj.", "dup1.", "dup2.")
+    if base is not None:
+        missing, unexpected = model.load_state_dict(base["model"], strict=False)
+        if unexpected or any(not k.startswith(DENSE_PARTS) for k in missing):
+            raise ValueError(f"reader mismatch: missing {missing} unexpected {unexpected}")
+        # the dense decoder starts as a copy of the trained keypoint decoder (good features for this creature)
+        model.dproj.load_state_dict(model.proj.state_dict())
+        model.dup1.load_state_dict(model.up1.state_dict())
+        model.dup2.load_state_dict(model.up2.state_dict())
+        train_p = [p for n, p in model.named_parameters() if n.startswith(DENSE_PARTS)]
+        for n, p in model.named_parameters():
+            p.requires_grad = n.startswith(DENSE_PARTS)
+        hidden_empty = bool(base.get("hidden_empty", hidden_empty))
+        print(f"[v2r] two-step: keypoint reader {dense_from} frozen (epoch {base.get('epoch')}), training the dense "
+              f"decoder + head only ({sum(p.numel() for p in train_p)} parameters)")
+        opt = torch.optim.AdamW(train_p, lr=lr, weight_decay=0.03)
+    else:
+        bb_params = list(model.backbone.parameters())
+        head_params = [p for n, p in model.named_parameters() if not n.startswith("backbone.")]
+        opt = torch.optim.AdamW([{"params": bb_params, "lr": lr * 0.1}, {"params": head_params, "lr": lr}],
+                                weight_decay=0.03)
     per_epoch = math.ceil(len(tr) / batch)
     if steps:
         epochs = math.ceil(int(steps) / max(per_epoch - 1, 1))  # drop_last: per_epoch - 1 full batches at least
@@ -51,6 +100,10 @@ def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dino
         dl = DataLoader(tr, batch_size=batch, shuffle=True, num_workers=workers, drop_last=True,
                         pin_memory=True, persistent_workers=False)
         model.train()
+        if base is not None:  # frozen parts behave exactly as at inference
+            model.eval()
+            for part in (model.dn, model.dproj, model.dup1, model.dup2):
+                part.train()
         tl = []
         for b in dl:
             x = b["img"].to(device, non_blocking=True)
@@ -60,8 +113,8 @@ def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dino
             depth = b["depth"].to(device)
             uv_hm = torch.stack([uv[..., 0] / stride_x, uv[..., 1] / stride_y], -1) - 0.5
             with torch.autocast("cuda", dtype=torch.bfloat16):
-                hm, dp = model(x, view)
-            hm, dp = hm.float(), dp.float()
+                outs = model(x, view, with_dense=use_dense, frozen_trunk=base is not None)
+            hm, dp = outs[0].float(), outs[1].float()
             seen = inside * b["vis"].to(device) if hidden_empty else inside
             tgt = gaussian_targets(uv_hm, seen, tr.hh, tr.hw, sigma)
             # focal-style weighted BCE on heatmaps (a hidden keypoint's map is all background -> low peak)
@@ -72,52 +125,77 @@ def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dino
             g = g / g.sum((-1, -2), keepdim=True).clamp(min=1e-6)
             d_pred = (dp * g).sum((-1, -2))
             l_d = (F.smooth_l1_loss(d_pred, depth, reduction="none", beta=0.05) * inside).sum() / inside.sum().clamp(min=1)
-            loss = l_hm * 10 + l_d
+            loss = l_hm * 10 + l_d if base is None else l_hm.detach() * 0  # frozen keypoints: dense loss only
+            dn_log = [0.0, 0.0, 0.0]
+            if use_dense:
+                l_fg, l_c, med = dense_loss(outs[2].float(), b["dense_coord"].to(device), b["dense_mask"].to(device),
+                                            b["dense_fast"].to(device).float())
+                loss = loss + dense * (l_fg + l_c)
+                dn_log = [l_fg.item(), l_c.item(), med.item()]
             opt.zero_grad(set_to_none=True)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
             opt.step()
             sched.step()
             step += 1
-            tl.append([l_hm.item(), l_d.item()])
+            tl.append([l_hm.item(), l_d.item()] + dn_log)
             if step % 50 == 0:
                 m = np.mean(tl[-50:], 0)
                 print(f"[v2r] ep {ep} step {step}/{steps} hm {m[0]:.4f} depth {m[1]:.4f} "
-                      f"{(time.time() - t0) / 60:.1f}min", flush=True)
+                      + (f"dense fg {m[2]:.4f} coord {m[3]:.3f} err {m[4]:.3f} " if use_dense else "")
+                      + f"{(time.time() - t0) / 60:.1f}min", flush=True)
             if step >= steps:
                 break
-        ev = evaluate(model, va, device, batch)
+        ev = evaluate(model, va, device, batch, dense=use_dense)
         rec = {"epoch": ep, "train_hm": float(np.mean(tl, 0)[0]), "train_depth": float(np.mean(tl, 0)[1]), **ev,
                "minutes": (time.time() - t0) / 60}
         log.write(json.dumps(rec) + "\n")
         log.flush()
         print(f"[v2r] == epoch {ep}: val px err median {ev['px_med']:.2f} p90 {ev['px_p90']:.2f} "
               f"(visible {ev['px_med_vis']:.2f}) depth-order acc {ev['depth_order']:.3f} "
-              f"conf visible {ev['conf_visible'] or 0:.2f} hidden {ev['conf_hidden'] or 0:.2f}", flush=True)
+              f"conf visible {ev['conf_visible'] or 0:.2f} hidden {ev['conf_hidden'] or 0:.2f}"
+              + (f" | dense err median {ev['dense_err_med']:.3f} (body box) fg IoU {ev['dense_fg_iou']:.3f}"
+                 if use_dense else ""), flush=True)
         state = {"model": model.state_dict(), "K": K, "views": tr.views, "backbone": backbone,
                  "net_wh": [tr.W, tr.H], "heat_wh": [tr.hw, tr.hh], "img": img, "epoch": ep, "val": ev,
-                 "hidden_empty": bool(hidden_empty), "smear_frac": float(smear_frac)}
+                 "hidden_empty": bool(hidden_empty), "smear_frac": float(smear_frac), "dense": float(dense)}
+        if use_dense:
+            state["dense_meta"] = json.load(open(os.path.join(project, "train_data", "dense_meta.json")))
+        if base is not None:
+            state["dense_from"] = os.path.abspath(dense_from)
+            state["dense_decoder"] = True
         torch.save(state, os.path.join(ckpt_dir, "last.pt"))
-        # a reader taught to answer "not here" for hidden keypoints is judged on the visible ones
-        crit = ev["px_mean_vis"] if hidden_empty else ev["px_mean"]
+        # a reader taught to answer "not here" for hidden keypoints is judged on the visible ones;
+        # with frozen keypoints (two-step) the dense head is judged on its own coordinate error
+        crit = ev["dense_err_med"] if base is not None else (ev["px_mean_vis"] if hidden_empty else ev["px_mean"])
         if crit < best:
             best = crit
             torch.save(state, os.path.join(ckpt_dir, "best.pt"))
         if step >= steps:
             break
-    print(f"[v2r] training done in {(time.time() - t0) / 60:.1f} min ({step} steps), best val px mean {best:.2f}")
+    print(f"[v2r] training done in {(time.time() - t0) / 60:.1f} min ({step} steps), best "
+          + ("dense err median" if base is not None else "val px mean") + f" {best:.3f}")
 
 
 @torch.no_grad()
-def evaluate(model, ds, device, batch):
+def evaluate(model, ds, device, batch, dense=False):
     model.eval()
     dl = DataLoader(ds, batch_size=batch, shuffle=False, num_workers=8)
     errs, errs_vis, order, conf_vis, conf_hid = [], [], [], [], []
+    d_err, d_inter, d_union = [], 0.0, 0.0
     sx, sy = ds.W / ds.hw, ds.H / ds.hh
     for b in dl:
         x = b["img"].to(device)
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            hm, dp = model(x, b["view"].to(device))
+            outs = model(x, b["view"].to(device), with_dense=dense)
+        hm, dp = outs[0], outs[1]
+        if dense:
+            dn = outs[2].float().cpu()
+            m = b["dense_mask"] > 0
+            pf = dn[:, 3] > 0
+            d_inter += float((pf & m).sum())
+            d_union += float((pf | m).sum())
+            d_err.append((dn[:, :3] - b["dense_coord"]).norm(dim=1)[m])
         uv, conf, d = decode(hm.float(), dp.float())
         uv = (uv + 0.5) * torch.tensor([sx, sy], device=device)
         e = (uv.cpu() - b["uv"]).norm(dim=-1) * b["px_scale"].float()[:, None]  # in panel pixels
@@ -139,6 +217,11 @@ def evaluate(model, ds, device, batch):
     o = torch.cat(order).numpy() if order else np.array([1.0])
     cv, ch = torch.cat(conf_vis).numpy(), torch.cat(conf_hid).numpy()
     model.train()
-    return {"px_mean": float(e.mean()), "px_med": float(np.median(e)), "px_p90": float(np.percentile(e, 90)),
-            "px_med_vis": float(np.median(ev)), "px_mean_vis": float(ev.mean()), "depth_order": float(o.mean()),
-            "conf_visible": float(cv.mean()) if cv.size else None, "conf_hidden": float(ch.mean()) if ch.size else None}
+    out = {"px_mean": float(e.mean()), "px_med": float(np.median(e)), "px_p90": float(np.percentile(e, 90)),
+           "px_med_vis": float(np.median(ev)), "px_mean_vis": float(ev.mean()), "depth_order": float(o.mean()),
+           "conf_visible": float(cv.mean()) if cv.size else None, "conf_hidden": float(ch.mean()) if ch.size else None}
+    if dense:
+        de = torch.cat(d_err).numpy()
+        out.update({"dense_err_med": float(np.median(de)), "dense_err_p90": float(np.percentile(de, 90)),
+                    "dense_fg_iou": d_inter / max(d_union, 1.0)})
+    return out

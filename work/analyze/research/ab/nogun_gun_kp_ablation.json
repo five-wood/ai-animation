@@ -1,0 +1,68 @@
+{
+ "m11101/exam/as_is": {
+  "joint_err_mean_pct_of_size": 1.4151625633239746,
+  "bone_angle_mean_deg": 8.9570048841036,
+  "bone_angle_p90_deg": 19.56876768500093,
+  "twist_mean_deg": 7.079873872912629,
+  "passed": true,
+  "body_full_rot_deg": 6.3
+ },
+ "m11101/exam/gun_kp_weight_0": {
+  "joint_err_mean_pct_of_size": 1.532122254371643,
+  "bone_angle_mean_deg": 8.718248544476543,
+  "bone_angle_p90_deg": 18.524637104483066,
+  "twist_mean_deg": 6.889323263533126,
+  "passed": true,
+  "body_full_rot_deg": 5.71
+ },
+ "m11101/exam_strike/as_is": {
+  "joint_err_mean_pct_of_size": 2.8322482109069824,
+  "bone_angle_mean_deg": 14.815342085212388,
+  "bone_angle_p90_deg": 45.34269006716053,
+  "twist_mean_deg": 10.953398695215757,
+  "passed": false,
+  "impact": {
+   "n": 10,
+   "peak_speed_ratio": 0.4310693404504231,
+   "overshoot_pct_of_size": 0.7075569259268897,
+   "stop_lag_frames": 0.8
+  },
+  "body_full_rot_deg": 4.87
+ },
+ "m11101/exam_strike/gun_kp_weight_0": {
+  "joint_err_mean_pct_of_size": 2.95339035987854,
+  "bone_angle_mean_deg": 15.034130723793757,
+  "bone_angle_p90_deg": 44.95961555621384,
+  "twist_mean_deg": 10.865634989384157,
+  "passed": false,
+  "impact": {
+   "n": 10,
+   "peak_speed_ratio": 0.434699142404965,
+   "overshoot_pct_of_size": 0.6890098924083369,
+   "stop_lag_frames": 0.8857142857142857
+  },
+  "body_full_rot_deg": 6.72
+ },
+ "m11101_nogun/exam/as_is": {
+  "joint_err_mean_pct_of_size": 1.994927167892456,
+  "bone_angle_mean_deg": 10.41969040792544,
+  "bone_angle_p90_deg": 24.43049678906829,
+  "twist_mean_deg": 8.025923470235082,
+  "passed": false,
+  "body_full_rot_deg": 12.81
+ },
+ "m11101_nogun/exam_strike/as_is": {
+  "joint_err_mean_pct_of_size": 2.931643009185791,
+  "bone_angle_mean_deg": 13.521018262905066,
+  "bone_angle_p90_deg": 35.55613360947183,
+  "twist_mean_deg": 11.73522197574714,
+  "passed": false,
+  "impact": {
+   "n": 10,
+   "peak_speed_ratio": 0.42585786134004594,
+   "overshoot_pct_of_size": 0.4294937048905662,
+   "stop_lag_frames": 0.7285714285714285
+  },
+  "body_full_rot_deg": 7.33
+ }
+}

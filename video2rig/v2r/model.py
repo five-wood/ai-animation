@@ -18,7 +18,11 @@ class Up(nn.Module):
 
 class JointReader(nn.Module):
     def __init__(self, n_kp, n_views=2, backbone="vit_base_patch14_dinov2.lvd142m", pretrained=True,
-                 img_size=(504, 448), layers=(-4, -3, -2, -1)):
+                 img_size=(504, 448), layers=(-4, -3, -2, -1), dense=False, dense_decoder=False):
+        """dense: also a per-pixel head (dense correspondence): 3 rest-pose surface coordinates (-1..1 in the body
+        box), a foreground logit and a log-scale (uncertainty) per heatmap cell.  Off by default (old readers).
+        dense_decoder: the dense head gets its own projection + upsampling (from the backbone features) instead of
+        sharing the keypoint decoder, so it can be trained on a frozen keypoint reader (two-step)."""
         super().__init__()
         self.backbone = timm.create_model(backbone, pretrained=pretrained, num_classes=0,
                                           img_size=img_size, dynamic_img_size=True)
@@ -32,6 +36,15 @@ class JointReader(nn.Module):
         self.hm = nn.Conv2d(128, n_kp, 1)
         self.dp = nn.Conv2d(128, n_kp, 1)
         nn.init.constant_(self.hm.bias, -4.0)
+        self.dense = bool(dense)
+        self.dense_decoder = bool(dense and dense_decoder)
+        if self.dense:
+            self.dn = nn.Sequential(nn.Conv2d(128, 64, 3, padding=1), nn.GroupNorm(8, 64), nn.GELU(),
+                                    nn.Conv2d(64, 5, 1))  # xyz, foreground logit, log-scale
+        if self.dense_decoder:
+            self.dproj = nn.Sequential(nn.Conv2d(d * len(layers), 256, 1), nn.GroupNorm(8, 256), nn.GELU())
+            self.dup1 = Up(256, 192)
+            self.dup2 = Up(192, 128)
         self.n_kp = n_kp
         self.patch = 14
 
@@ -54,9 +67,17 @@ class JointReader(nn.Module):
         fs = [o[:, npt:].transpose(1, 2).reshape(B, -1, h, w) for o in outs]
         return torch.cat(fs, 1)
 
-    def forward(self, x, view):
-        f = self.features(x, view)
-        f = self.up2(self.up1(self.proj(f)))
+    def forward(self, x, view, with_dense=False, frozen_trunk=False):
+        """frozen_trunk: the keypoint reader's own parts (backbone, keypoint decoder) run without gradients
+        (two-step training of the dense part only)."""
+        with torch.set_grad_enabled(torch.is_grad_enabled() and not frozen_trunk):
+            f0 = self.features(x, view)
+            f = self.up2(self.up1(self.proj(f0)))
+        if with_dense:
+            if not self.dense:
+                raise ValueError("this reader has no dense head")
+            g = self.dup2(self.dup1(self.dproj(f0))) if self.dense_decoder else f
+            return self.hm(f), self.dp(f), self.dn(g)  # + (B,5,4h,4w)
         return self.hm(f), self.dp(f)  # (B,K,4h,4w) logits, depth
 
 

@@ -45,7 +45,9 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
                  position_strength=400., local_strength=24., root_strength=40.,
                  stationary_starts=None, stationary_segment_weights=None, stationary_anchor_strength=0.,
                  depth_mode="numeric", depth_strength=.025, order_config=None,
-                 robust_pos=0., robust_rot=0., front_vertical=1.0):
+                 robust_pos=0., robust_rot=0., front_vertical=1.0,
+                 surface=None, masks=None, silhouette_strength=0., coverage_strength=0., silhouette_opts=None,
+                 dense=None, dense_strength=None):
     """Warm fit followed by coupled root/local temporal refinement, no post-filter.
 
     `initial` is optional for controlled ablations. When omitted, a bounded legacy fit
@@ -58,6 +60,15 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
     Measured 2026-11-04 (work/analyze/research): 0.003 / 0.02 kept jitter at the temporal level
     and restored impacts to about the legacy level on m11101 and lizard (real clip + smooth exam
     + strike exam).
+
+    silhouette_strength / coverage_strength (0 = off): v2r.silhouette terms in the refinement, needing
+    surface (geom.load_surface) and masks (T,V,H,W) in the solver's image coordinates.  The warm start is
+    their fixed reference pose (point speeds, which outline pixels are body).  silhouette_opts: extra
+    SilhouetteTerms arguments.
+
+    dense / dense_strength (None = off): dense surface observations for upper-bound experiments, a dict of
+    v2r.silhouette.DenseTerms arguments (vid, w, uv / normal / depth) with surface, and strengths per term
+    {"dense_uv": .., "dense_normal": .., "dense_depth": ..}.
     """
     if depth_mode not in ("off","numeric","order"):
         raise ValueError("Unknown depth mode")
@@ -122,6 +133,18 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
     dt_scale2 = (fps / 30.) ** 2
     from v2r.solve import view_axis_weights
     axis_w = view_axis_weights(studio, front_vertical, device)
+    sil = None
+    if silhouette_strength > 0 or coverage_strength > 0:
+        if surface is None or masks is None:
+            raise ValueError("silhouette terms need surface and masks")
+        from v2r.silhouette import SilhouetteTerms
+        with torch.no_grad():
+            ref_world, _ = sk.fk(td(G0), td(E0))
+        sil = SilhouetteTerms(sk, cams, surface, masks, scale_px, ref_world, **(silhouette_opts or {}))
+    dense_t = None
+    if dense is not None and dense_strength and any(v > 0 for v in dense_strength.values()):
+        from v2r.silhouette import DenseTerms
+        dense_t = DenseTerms(sk, cams, surface, scale_px=scale_px, **dense)
 
     def forward():
         R = rot6d_to_mat(r6)
@@ -166,6 +189,20 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
             order_loss=ordering_loss(z,order_t,sk.size)*depth_strength/norm
             total=total+order_loss
             info["depth_order"]=order_loss
+        if sil is not None:
+            inside, coverage = sil.losses(world)
+            if silhouette_strength > 0:
+                total = total + inside * silhouette_strength
+                info["silhouette"] = inside * silhouette_strength
+            if coverage_strength > 0:
+                total = total + coverage * coverage_strength
+                info["coverage"] = coverage * coverage_strength
+        if dense_t is not None:
+            for k, v in dense_t.losses(world).items():
+                s = float(dense_strength.get(k, 0.))
+                if s > 0:
+                    total = total + v * s
+                    info[k] = v * s
         # Weak warm-pose trust for underdetermined twists; do not freeze real visible motion.
         trust = (E-td(E0)).square().mean() * .0003
         total = total + trust
@@ -207,4 +244,6 @@ def fit_temporal(rig, studio, uv, weights, X3, fps, depth=None, iters=850,
                            "contact_constraints":False,"post_filter":False,
                            "image_stationary_segment_strength":stationary_anchor_strength,
                            "depth_mode":depth_mode,"depth_strength":depth_strength,
+                           "silhouette_strength":silhouette_strength,"coverage_strength":coverage_strength,
+                           "dense_strength":dense_strength,
                            "order_gated_fraction":float(np.mean(order_data['gate']>0)) if order_data is not None and order_data['gate'].size else 0.}}

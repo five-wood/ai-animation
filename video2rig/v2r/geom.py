@@ -237,6 +237,32 @@ class Skeleton:
         kp = torch.einsum("tkij,kj->tki", Wk, tail_local)[..., :3]
         return world, kp
 
+    def rest_world(self):
+        """(B,4,4) torch world matrices of every bone in the rest pose (G = identity, all rotations zero)."""
+        if getattr(self, "_rest_world", None) is None:
+            with torch.no_grad():
+                eye = torch.eye(4, dtype=self.dtype, device=self.device)[None]
+                w, _ = self.fk(eye, torch.zeros(1, self.A, 3, dtype=self.dtype, device=self.device))
+            self._rest_world = w[0]
+            self._rest_world_inv = torch.linalg.inv(w[0].double()).to(self.dtype)
+        return self._rest_world
+
+    def skin_points(self, world, surf, normals=False):
+        """Linear blend skinning of rest-pose surface points.
+
+        world (T,B,4,4) bone world matrices from fk / fk_rot; surf = dict of torch tensors from
+        load_surface(): "V" (N,3) rest world positions, "w_idx" (N,W) long, "w_val" (N,W), optional "N" (N,3).
+        Each bone moves its points by world_t @ inverse(rest world).  Returns (T,N,3) positions and, with
+        normals=True, (T,N,3) unit normals rotated by the blended matrix."""
+        self.rest_world()
+        Mb = world @ self._rest_world_inv  # (T,B,4,4)
+        Mv = (Mb[:, surf["w_idx"]] * surf["w_val"][None, :, :, None, None]).sum(2)  # (T,N,4,4)
+        P = torch.einsum("tnij,nj->tni", Mv[..., :3, :3], surf["V"]) + Mv[..., :3, 3]
+        if not normals:
+            return P
+        n = torch.einsum("tnij,nj->tni", Mv[..., :3, :3], surf["N"])
+        return P, torch.nn.functional.normalize(n, dim=-1)
+
     def fk_np(self, G, eul_active):
         with torch.no_grad():
             w, k = self.fk(torch.tensor(G, dtype=self.dtype, device=self.device),
@@ -307,6 +333,27 @@ class Skeleton:
         a, _ = self.limb_axes()
         d = np.einsum("tbij,bj->tbi", world[..., :3, :3], a)
         return d / np.linalg.norm(d, axis=-1, keepdims=True).clip(1e-9)
+
+
+def load_surface(path, device="cpu", dtype=torch.float32, keep_props=False):
+    """surface.npz (blender/export_surface.py) -> dict of torch tensors for Skeleton.skin_points, plus numpy
+    "F" (triangles) and "tri_prop".  Without keep_props, vertices used only by prop triangles are dropped."""
+    z = np.load(path)
+    V, F, N = z["V"], z["F"], z["N"]
+    w_idx, w_val = z["w_idx"], z["w_val"]
+    tri_prop = z["tri_prop"].astype(bool) if "tri_prop" in z else np.zeros(len(F), bool)
+    keep = np.ones(len(V), bool)
+    if not keep_props and tri_prop.any():
+        keep = np.zeros(len(V), bool)
+        keep[F[~tri_prop].ravel()] = True
+        remap = np.full(len(V), -1, np.int64)
+        remap[keep] = np.arange(keep.sum())
+        F = remap[F[~tri_prop]]
+        tri_prop = tri_prop[~tri_prop]
+    t = lambda a: torch.tensor(np.asarray(a), dtype=dtype, device=device)
+    return {"V": t(V[keep]), "N": t(N[keep]), "w_idx": torch.tensor(w_idx[keep], dtype=torch.long, device=device),
+            "w_val": t(w_val[keep]), "F": np.asarray(F, np.int64), "tri_prop": tri_prop,
+            "size": float(z["size"]), "vertex_keep": keep}
 
 
 def unit_rot_np(M):

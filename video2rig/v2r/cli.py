@@ -114,7 +114,8 @@ def cmd_gen(a):
 def cmd_train(a):
     from v2r.train import train
     train(a.project, epochs=a.epochs, batch=a.batch, lr=a.lr, backbone=a.backbone, img=a.img,
-          workers=a.workers, steps=a.steps, hidden_empty=a.hidden_empty, smear_frac=a.smear)
+          workers=a.workers, steps=a.steps, hidden_empty=a.hidden_empty, smear_frac=a.smear, dense=a.dense,
+          dense_from=a.dense_from)
 
 
 def cmd_exam(a):
@@ -208,6 +209,12 @@ def main(argv=None):
                    help="keypoints hidden by the body get an empty target: the reader learns a low peak there")
     s.add_argument("--smear", type=float, default=0.0,
                    help="share of training pictures with a limb smeared into a streak, e.g. 0.3")
+    s.add_argument("--dense", type=float, default=0.0,
+                   help="also train the dense correspondence head with this loss weight (e.g. 1.0); needs "
+                        "train_data/dense_*.npz from python -m v2r.dense_labels")
+    s.add_argument("--dense-from", default=None,
+                   help="two-step: start from this trained keypoint reader (best.pt), freeze it and train only the "
+                        "dense head, so the keypoints read exactly as before")
     s.set_defaults(fn=cmd_train)
     s = sub.add_parser("exam")
     s.add_argument("project")

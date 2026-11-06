@@ -1,0 +1,79 @@
+
+=== legacy
+  lizard  exam         n=4 | joint% 0.72 (d +0.11, 0/4 better, worst +0.14) | limb 4.92 (d +0.84, 0/4 better, worst +1.09) | twist 8.31 (d +0.84, 0/4 better, worst +1.04) | body 8.69 (d +0.39, 0/4 better, worst +0.73)
+  lizard  exam_strike  n=4 | joint% 0.87 (d -0.01, 3/4 better, worst +0.00) | limb 5.69 (d +0.12, 1/4 better, worst +0.32) | twist 8.25 (d +0.40, 1/4 better, worst +0.67) | body 8.93 (d +0.37, 0/4 better, worst +0.52) | peak 60% lag 0.70
+  m11101  exam         n=4 | joint% 1.83 (d +0.22, 0/4 better, worst +0.32) | limb 10.73 (d +1.03, 0/4 better, worst +1.59) | twist 8.54 (d +0.80, 0/4 better, worst +1.37) | body 5.90 (d +0.72, 0/4 better, worst +1.02)
+  m11101  exam_strike  n=4 | joint% 2.22 (d -0.12, 3/4 better, worst +0.12) | limb 12.19 (d -0.69, 3/4 better, worst +0.05) | twist 8.48 (d -0.02, 2/4 better, worst +0.08) | body 6.03 (d +0.44, 0/4 better, worst +1.18) | peak 50% lag 0.90
+  REAL m11101:real: Rhand step/jerk 2.92/1.27 Lhand 0.95/0.47 local jerk 1.03 | impact peak 7.81% stop 3.7f | res hands 6.82 body 1.81
+
+=== temporal
+  lizard  exam         n=4 | joint% 0.61 (sd 0.03, range 0.58..0.66) | limb 4.08 (sd 0.07, range 3.98..4.17) | twist 7.47 (sd 0.37, range 7.05..8.07) | body 8.31 (sd 0.20, range 8.00..8.51)
+  lizard  exam_strike  n=4 | joint% 0.88 (sd 0.11, range 0.77..1.07) | limb 5.57 (sd 0.36, range 5.14..6.10) | twist 7.86 (sd 0.42, range 7.36..8.37) | body 8.56 (sd 0.99, range 7.23..9.82) | peak 56% lag 0.76
+  m11101  exam         n=4 | joint% 1.60 (sd 0.19, range 1.29..1.81) | limb 9.70 (sd 0.83, range 8.41..10.45) | twist 7.74 (sd 0.50, range 6.95..8.25) | body 5.18 (sd 0.28, range 4.85..5.46)
+  m11101  exam_strike  n=4 | joint% 2.34 (sd 0.50, range 1.61..2.88) | limb 12.88 (sd 1.64, range 10.37..14.76) | twist 8.51 (sd 1.55, range 6.78..10.90) | body 5.59 (sd 1.54, range 4.46..8.22) | peak 54% lag 0.78
+  REAL m11101:real: Rhand step/jerk 1.23/0.27 Lhand 0.47/0.13 local jerk 0.70 | impact peak 8.76% stop 3.0f | res hands 6.17 body 1.86
+
+=== temporal:{"silhouette_strength":0.3}
+  lizard  exam         n=4 | joint% 0.61 (d -0.01, 4/4 better, worst -0.00) | limb 4.04 (d -0.04, 4/4 better, worst -0.02) | twist 7.42 (d -0.06, 4/4 better, worst -0.03) | body 8.29 (d -0.01, 3/4 better, worst +0.00)
+  lizard  exam_strike  n=4 | joint% 0.87 (d -0.01, 4/4 better, worst -0.01) | limb 5.52 (d -0.05, 4/4 better, worst -0.05) | twist 7.78 (d -0.07, 4/4 better, worst -0.01) | body 8.53 (d -0.02, 4/4 better, worst -0.00) | peak 57% lag 0.71
+  m11101  exam         n=4 | joint% 1.58 (d -0.02, 4/4 better, worst -0.01) | limb 9.62 (d -0.08, 4/4 better, worst -0.03) | twist 7.67 (d -0.07, 4/4 better, worst -0.05) | body 5.14 (d -0.04, 4/4 better, worst -0.03)
+  m11101  exam_strike  n=4 | joint% 2.30 (d -0.04, 3/4 better, worst +0.00) | limb 12.82 (d -0.06, 2/4 better, worst +0.05) | twist 8.35 (d -0.16, 4/4 better, worst -0.08) | body 5.57 (d -0.02, 3/4 better, worst +0.01) | peak 54% lag 0.78
+  REAL m11101:real: Rhand step/jerk 1.23/0.27 Lhand 0.47/0.14 local jerk 0.71 | impact peak 8.88% stop 3.0f | res hands 6.08 body 1.86
+
+=== temporal:{"silhouette_strength":1.0}
+  lizard  exam         n=4 | joint% 0.59 (d -0.03, 4/4 better, worst -0.01) | limb 3.94 (d -0.13, 4/4 better, worst -0.06) | twist 7.33 (d -0.14, 4/4 better, worst -0.07) | body 8.26 (d -0.04, 4/4 better, worst -0.01)
+  lizard  exam_strike  n=4 | joint% 0.85 (d -0.03, 4/4 better, worst -0.02) | limb 5.41 (d -0.17, 4/4 better, worst -0.14) | twist 7.69 (d -0.17, 4/4 better, worst -0.02) | body 8.49 (d -0.07, 4/4 better, worst -0.01) | peak 57% lag 0.70
+  m11101  exam         n=4 | joint% 1.48 (d -0.12, 4/4 better, worst -0.03) | limb 9.27 (d -0.43, 4/4 better, worst -0.10) | twist 7.45 (d -0.29, 4/4 better, worst -0.10) | body 5.06 (d -0.12, 4/4 better, worst -0.07)
+  m11101  exam_strike  n=4 | joint% 2.22 (d -0.11, 4/4 better, worst -0.03) | limb 12.57 (d -0.31, 3/4 better, worst +0.00) | twist 8.16 (d -0.34, 4/4 better, worst -0.18) | body 5.52 (d -0.06, 3/4 better, worst +0.01) | peak 55% lag 0.81
+  REAL m11101:real: Rhand step/jerk 1.22/0.25 Lhand 0.48/0.14 local jerk 0.71 | impact peak 9.24% stop 3.3f | res hands 5.93 body 1.86
+
+=== temporal:{"silhouette_strength":0.3,"coverage_strength":0.3}
+  lizard  exam         n=4 | joint% 0.59 (d -0.02, 4/4 better, worst -0.01) | limb 3.97 (d -0.11, 4/4 better, worst -0.05) | twist 7.46 (d -0.01, 3/4 better, worst +0.18) | body 8.20 (d -0.10, 4/4 better, worst -0.00)
+  lizard  exam_strike  n=4 | joint% 0.84 (d -0.04, 4/4 better, worst -0.03) | limb 5.36 (d -0.22, 4/4 better, worst -0.19) | twist 7.66 (d -0.20, 4/4 better, worst -0.00) | body 8.42 (d -0.14, 3/4 better, worst +0.04) | peak 57% lag 0.69
+  m11101  exam         n=4 | joint% 1.59 (d -0.01, 3/4 better, worst +0.02) | limb 9.49 (d -0.20, 4/4 better, worst -0.07) | twist 8.01 (d +0.27, 0/4 better, worst +0.41) | body 4.99 (d -0.18, 3/4 better, worst +0.05)
+  m11101  exam_strike  n=4 | joint% 2.30 (d -0.04, 3/4 better, worst +0.06) | limb 12.67 (d -0.21, 3/4 better, worst +0.04) | twist 8.44 (d -0.07, 3/4 better, worst +0.40) | body 5.48 (d -0.11, 4/4 better, worst -0.01) | peak 55% lag 0.77
+  REAL m11101:real: Rhand step/jerk 1.14/0.30 Lhand 0.52/0.14 local jerk 0.73 | impact peak 9.20% stop 3.3f | res hands 6.15 body 1.81
+
+=== temporal:{"silhouette_strength":1.0,"coverage_strength":1.0}
+  lizard  exam         n=4 | joint% 0.56 (d -0.05, 4/4 better, worst -0.03) | limb 3.81 (d -0.26, 4/4 better, worst -0.14) | twist 7.66 (d +0.19, 1/4 better, worst +0.69) | body 8.11 (d -0.20, 4/4 better, worst -0.09)
+  lizard  exam_strike  n=4 | joint% 0.81 (d -0.08, 4/4 better, worst -0.06) | limb 5.11 (d -0.46, 4/4 better, worst -0.37) | twist 7.80 (d -0.06, 3/4 better, worst +0.20) | body 8.29 (d -0.26, 3/4 better, worst +0.06) | peak 59% lag 0.69
+  m11101  exam         n=4 | joint% 1.60 (d +0.00, 3/4 better, worst +0.09) | limb 9.54 (d -0.16, 2/4 better, worst +0.15) | twist 8.35 (d +0.61, 0/4 better, worst +1.04) | body 4.90 (d -0.28, 3/4 better, worst +0.05)
+  m11101  exam_strike  n=4 | joint% 2.28 (d -0.05, 3/4 better, worst +0.01) | limb 12.53 (d -0.35, 4/4 better, worst -0.07) | twist 8.62 (d +0.11, 1/4 better, worst +0.59) | body 5.46 (d -0.12, 4/4 better, worst -0.09) | peak 56% lag 0.69
+  REAL m11101:real: Rhand step/jerk 1.47/0.35 Lhand 0.65/0.20 local jerk 0.99 | impact peak 10.56% stop 3.0f | res hands 6.88 body 1.75
+
+=== temporal:{"silhouette_strength":1.0,"coverage_strength":1.0,"masks_kind":"gt"}
+  lizard  exam         n=4 | joint% 0.54 (d -0.07, 4/4 better, worst -0.05) | limb 3.72 (d -0.36, 4/4 better, worst -0.23) | twist 7.41 (d -0.06, 2/4 better, worst +0.50) | body 8.05 (d -0.25, 4/4 better, worst -0.09)
+  lizard  exam_strike  n=4 | joint% 0.79 (d -0.09, 4/4 better, worst -0.07) | limb 5.07 (d -0.50, 4/4 better, worst -0.39) | twist 7.92 (d +0.07, 1/4 better, worst +0.22) | body 8.35 (d -0.21, 3/4 better, worst +0.12) | peak 59% lag 0.67
+  m11101  exam         n=4 | joint% 1.58 (d -0.02, 3/4 better, worst +0.02) | limb 9.40 (d -0.30, 3/4 better, worst +0.05) | twist 8.09 (d +0.35, 0/4 better, worst +0.51) | body 4.78 (d -0.39, 4/4 better, worst -0.15)
+  m11101  exam_strike  n=4 | joint% 2.25 (d -0.09, 4/4 better, worst -0.02) | limb 12.32 (d -0.56, 4/4 better, worst -0.23) | twist 8.73 (d +0.22, 2/4 better, worst +0.61) | body 5.24 (d -0.35, 4/4 better, worst -0.13) | peak 57% lag 0.71
+
+=== legacy:{"silhouette_strength":1.0,"coverage_strength":1.0}
+  lizard  exam         n=4 | joint% nan (d +nan, 0/4 better, worst +nan) | limb nan (d +nan, 0/4 better, worst +nan) | twist nan (d +nan, 0/4 better, worst +nan) | body nan (d +nan, 1/4 better, worst +nan)
+  lizard  exam_strike  n=4 | joint% 0.82 (d -0.07, 4/4 better, worst -0.05) | limb 5.38 (d -0.19, 3/4 better, worst +0.04) | twist 8.55 (d +0.70, 0/4 better, worst +1.18) | body 8.74 (d +0.18, 1/4 better, worst +0.67) | peak 60% lag 0.72
+  m11101  exam         n=4 | joint% 1.83 (d +0.23, 0/4 better, worst +0.32) | limb 10.70 (d +1.00, 0/4 better, worst +1.72) | twist 9.25 (d +1.51, 0/4 better, worst +2.10) | body 5.67 (d +0.50, 0/4 better, worst +0.86)
+  m11101  exam_strike  n=4 | joint% 2.22 (d -0.11, 4/4 better, worst -0.02) | limb 12.28 (d -0.60, 4/4 better, worst -0.18) | twist 9.02 (d +0.51, 0/4 better, worst +0.79) | body 5.91 (d +0.32, 1/4 better, worst +0.94) | peak 51% lag 0.96
+  REAL m11101:real: Rhand step/jerk 5.65/2.94 Lhand 3.30/1.76 local jerk 4.50 | impact peak 8.93% stop 4.0f | res hands 8.07 body 1.87
+
+=== temporal:{"dense":{"uv":1.0}}
+  lizard  exam         n=4 | joint% 0.29 (d -0.32, 4/4 better, worst -0.30) | limb 2.01 (d -2.07, 4/4 better, worst -1.89) | twist 2.15 (d -5.32, 4/4 better, worst -4.87) | body 3.11 (d -5.20, 4/4 better, worst -4.81)
+  lizard  exam_strike  n=4 | joint% 0.47 (d -0.41, 4/4 better, worst -0.39) | limb 2.99 (d -2.58, 4/4 better, worst -2.42) | twist 2.76 (d -5.09, 4/4 better, worst -4.28) | body 3.59 (d -4.96, 4/4 better, worst -4.15) | peak 76% lag 0.35
+  m11101  exam         n=4 | joint% 0.94 (d -0.66, 4/4 better, worst -0.55) | limb 6.17 (d -3.53, 4/4 better, worst -3.13) | twist 3.35 (d -4.39, 4/4 better, worst -4.19) | body 2.86 (d -2.32, 4/4 better, worst -2.02)
+  m11101  exam_strike  n=4 | joint% 1.65 (d -0.68, 4/4 better, worst -0.56) | limb 9.45 (d -3.43, 4/4 better, worst -2.90) | twist 4.70 (d -3.80, 4/4 better, worst -3.54) | body 3.27 (d -2.32, 4/4 better, worst -1.82) | peak 79% lag 0.31
+
+=== temporal:{"dense":{"normal":0.3}}
+  lizard  exam         n=4 | joint% 0.59 (d -0.02, 4/4 better, worst -0.01) | limb 3.89 (d -0.18, 4/4 better, worst -0.15) | twist 3.84 (d -3.63, 4/4 better, worst -3.23) | body 7.59 (d -0.72, 4/4 better, worst -0.58)
+  lizard  exam_strike  n=4 | joint% 0.86 (d -0.02, 4/4 better, worst -0.01) | limb 5.36 (d -0.21, 4/4 better, worst -0.16) | twist 4.48 (d -3.38, 4/4 better, worst -2.87) | body 7.87 (d -0.69, 4/4 better, worst -0.55) | peak 57% lag 0.80
+  m11101  exam         n=4 | joint% 1.43 (d -0.17, 4/4 better, worst -0.05) | limb 8.69 (d -1.01, 4/4 better, worst -0.41) | twist 5.84 (d -1.90, 4/4 better, worst -1.58) | body 4.98 (d -0.20, 4/4 better, worst -0.14)
+  m11101  exam_strike  n=4 | joint% 2.16 (d -0.17, 4/4 better, worst -0.07) | limb 11.89 (d -0.99, 4/4 better, worst -0.46) | twist 6.52 (d -1.98, 4/4 better, worst -1.62) | body 5.44 (d -0.15, 4/4 better, worst -0.12) | peak 55% lag 0.82
+
+=== temporal:{"dense":{"depth":1.0}}
+  lizard  exam         n=4 | joint% 0.44 (d -0.17, 4/4 better, worst -0.16) | limb 2.83 (d -1.25, 4/4 better, worst -1.21) | twist 3.38 (d -4.09, 4/4 better, worst -3.78) | body 5.01 (d -3.29, 4/4 better, worst -2.65)
+  lizard  exam_strike  n=4 | joint% 0.64 (d -0.24, 4/4 better, worst -0.18) | limb 4.00 (d -1.57, 4/4 better, worst -1.34) | twist 4.07 (d -3.79, 4/4 better, worst -3.11) | body 5.39 (d -3.16, 4/4 better, worst -2.33) | peak 65% lag 0.73
+  m11101  exam         n=4 | joint% 0.91 (d -0.69, 4/4 better, worst -0.40) | limb 6.25 (d -3.45, 4/4 better, worst -2.54) | twist 3.91 (d -3.83, 4/4 better, worst -2.87) | body 3.66 (d -1.51, 4/4 better, worst -0.97)
+  m11101  exam_strike  n=4 | joint% 1.32 (d -1.02, 4/4 better, worst -0.44) | limb 8.87 (d -4.01, 4/4 better, worst -1.70) | twist 4.94 (d -3.57, 4/4 better, worst -2.50) | body 4.29 (d -1.29, 4/4 better, worst -0.80) | peak 72% lag 0.48
+
+=== temporal:{"dense":{"uv":1.0,"noise_px":3.0}}
+  lizard  exam         n=4 | joint% 0.36 (d -0.25, 4/4 better, worst -0.23) | limb 2.48 (d -1.60, 4/4 better, worst -1.41) | twist 2.72 (d -4.75, 4/4 better, worst -4.32) | body 3.94 (d -4.36, 4/4 better, worst -4.16)
+  lizard  exam_strike  n=4 | joint% 0.55 (d -0.33, 4/4 better, worst -0.30) | limb 3.55 (d -2.03, 4/4 better, worst -1.92) | twist 3.42 (d -4.44, 4/4 better, worst -3.68) | body 4.34 (d -4.22, 4/4 better, worst -3.48) | peak 72% lag 0.28
+  m11101  exam         n=4 | joint% 1.03 (d -0.57, 4/4 better, worst -0.47) | limb 6.61 (d -3.09, 4/4 better, worst -2.62) | twist 3.82 (d -3.92, 4/4 better, worst -3.72) | body 3.25 (d -1.92, 4/4 better, worst -1.64)
+  m11101  exam_strike  n=4 | joint% 1.73 (d -0.60, 4/4 better, worst -0.50) | limb 9.91 (d -2.97, 4/4 better, worst -2.59) | twist 5.18 (d -3.32, 4/4 better, worst -3.11) | body 3.69 (d -1.89, 4/4 better, worst -1.57) | peak 77% lag 0.33

@@ -14,7 +14,7 @@ def load_reader(project, device="cuda"):
     st = torch.load(os.path.join(project, "model", "best.pt"), map_location="cpu", weights_only=False)
     W, H = st["net_wh"]
     m = JointReader(st["K"], n_views=len(st["views"]), backbone=st["backbone"], pretrained=False,
-                    img_size=(H, W))
+                    img_size=(H, W), dense=bool(st.get("dense", 0)), dense_decoder=bool(st.get("dense_decoder")))
     m.load_state_dict(st["model"])
     return m.to(device).eval(), st
 

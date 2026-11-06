@@ -205,9 +205,12 @@ def view_axis_weights(studio, front_vertical=1.0, device="cpu"):
 
 
 def fit(rig, studio, uv, conf, X3, depth=None, iters=1500, device="cuda", w_smooth=1.0, w_depth=0.05,
-        verbose=True, fps=None, front_vertical=1.0):
+        verbose=True, fps=None, front_vertical=1.0,
+        surface=None, masks=None, silhouette_strength=0., coverage_strength=0., silhouette_opts=None):
     # None preserves the original legacy behaviour. Experimental warm starts supply
     # fps to express acceleration penalties in the same 30Hz-reference units.
+    # silhouette_strength / coverage_strength (0 = off): v2r.silhouette terms, in the last (fine) stage only,
+    # with the pose after stage 1 as their fixed reference; need surface (geom.load_surface) and masks.
     temporal_scale = (float(fps) / 30.) ** 4 if fps is not None else 1.0
     T = uv.shape[0]
     cams = Cams(studio, device=device)
@@ -242,7 +245,12 @@ def fit(rig, studio, uv, conf, X3, depth=None, iters=1500, device="cuda", w_smoo
         world, kp = sk.fk(G, eul)
         return G, eul, world, kp
 
-    def losses(kp, eul, stage):
+    sil = [None]
+    use_sil = silhouette_strength > 0 or coverage_strength > 0
+    if use_sil and (surface is None or masks is None):
+        raise ValueError("silhouette terms need surface and masks")
+
+    def losses(kp, eul, stage, world=None):
         puv, pz = cams.project_t(kp)  # (T,V,K,2), (T,V,K)
         e = ((puv - t_uv).square() * axis_w[None, :, None, :]).sum(-1).sqrt() / size_px
         l_rep = (t_conf * (e ** 2 / (e ** 2 + 0.03 ** 2)) * 0.03 ** 2 * 1e3).mean()  # Geman-McClure
@@ -262,15 +270,28 @@ def fit(rig, studio, uv, conf, X3, depth=None, iters=1500, device="cuda", w_smoo
             l_d = (t_conf * (dz - t_dep).pow(2)).mean() * w_depth
             l = l + l_d
             out["depth"] = l_d.item()
+        if sil[0] is not None and stage == 2:
+            inside, coverage = sil[0].losses(world)
+            if silhouette_strength > 0:
+                l = l + inside * silhouette_strength
+                out["silhouette"] = inside.item() * silhouette_strength
+            if coverage_strength > 0:
+                l = l + coverage * coverage_strength
+                out["coverage"] = coverage.item() * coverage_strength
         l = l + 1e-3 * pe.pow(2).mean()  # mild preference for the middle of the range
         return l, out
 
     stages = [([r6, trp], 0.02, iters // 5), ([r6, trp, pe], 0.03, iters), ([r6, trp, pe], 0.005, iters // 3)]
     for si, (params, lr, n) in enumerate(stages):
+        if si == 2 and use_sil:
+            from v2r.silhouette import SilhouetteTerms
+            with torch.no_grad():
+                _, _, ref_world, _ = forward()
+            sil[0] = SilhouetteTerms(sk, cams, surface, masks, size_px, ref_world, **(silhouette_opts or {}))
         opt = torch.optim.Adam(params, lr=lr)
         for it in range(n):
             G, eul, world, kp = forward()
-            l, info = losses(kp, eul, si)
+            l, info = losses(kp, eul, si, world)
             opt.zero_grad()
             l.backward()
             opt.step()
