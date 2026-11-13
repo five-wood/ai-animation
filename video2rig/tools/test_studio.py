@@ -4,6 +4,7 @@ python video2rig/tools/test_studio.py http://127.0.0.1:8711 <video.mp4>
 Requires STUDIO_ENGINE=fake (see work/studio-dev/setup_local.py) and the admin admin/admin123.
 """
 import json
+import os
 import sys
 import time
 import uuid
@@ -110,15 +111,30 @@ check(r.status_code == 200 and r.json()['status'] == 'uploaded', 'character uplo
 cid = r.json()['id']
 check(u.post('/api/characters', data={'name': 'x'}, files=[('files', ('a.exe', b'x', 'application/octet-stream'))]).status_code == 400, 'bad model rejected')
 check(other.get(f'/api/characters/{cid}').status_code == 404, 'unpublished character private')
+c = wait(u, f'/api/characters/{cid}', lambda x: x['inspect']['status'] in ('done', 'failed'))
+check(c['inspect']['status'] == 'done' and c['preview']['inspected'] and c['orient_editable'], 'uploaded model inspected, orientation editable')
+check(u.get(c['preview']['url']).status_code == 200, 'inspected preview glb served')
+check(other.put(f'/api/characters/{cid}/orient', json={'matrix': [1, 0, 0, 0, 0, -1, 0, 1, 0]}).status_code in (403, 404), 'others cannot orient')
+check(u.put(f'/api/characters/{cid}/orient', json={'matrix': [1, 0, 0, 0, 1, 0, 0, 0, -1]}).status_code == 400, 'mirror rejected')
+r = u.put(f'/api/characters/{cid}/orient', json={'matrix': [1, 0, 0, 0, 0, -1, 0, 1, 0]})
+check(r.status_code == 200 and r.json()['orient']['up'] == '+Y' and r.json()['orient']['facing'] == '-Y', f'orient saved {r.text[:120]}')
 r = u.post(f'/api/characters/{cid}/prepare').json()
 check(r['status'] == 'pending_review', 'prepare needs review')
+check(u.put(f'/api/characters/{cid}/orient', json={'matrix': [1, 0, 0, 0, 1, 0, 0, 0, 1]}).status_code == 400, 'orientation locked after submit')
 check(u.get('/api/admin/overview').status_code == 403, 'admin api blocked for users')
 adm = client()
 check(adm.post('/api/auth/login', json={'username': 'admin', 'password': 'admin123'}).status_code == 200, 'admin login')
 check(adm.patch(f'/api/admin/characters/{cid}', json={'approve': True}).status_code == 200, 'admin approve')
 c = wait(u, f'/api/characters/{cid}', lambda x: x['status'] in ('ready', 'failed'), limit=60)
 check(c['status'] == 'ready', 'uploaded character prepared')
-check(c['preview'] and c['preview']['kind'] == 'fbx', 'uploaded character previewable')
+job_log = adm.get(f'/api/admin/overview').json()
+pc = next(x for x in job_log['characters'] if x['id'] == cid)
+check(pc['project'] and pc['project'].startswith('st'), 'own project for uploaded character')
+fake_dir = os.path.join(os.environ.get('V2R_ROOT', ''), 'studio', 'fake_jobs')
+plog = [open(os.path.join(fake_dir, f), encoding='utf-8').read() for f in os.listdir(fake_dir) if f'-pipeline-{pc["project"]}-' in f] if os.path.isdir(fake_dir) else []
+check(plog and '"--up=+Y"' in plog[-1] and '"--facing=-Y"' in plog[-1], f'pipeline got --up/--facing from the web orientation: {plog[-1][:120] if plog else "no log"}')
+check(c['preview'] and c['preview'].get('inspected') and u.get(c['preview']['url']).status_code == 200, 'uploaded character previewable (inspected glb)')
+check(not c['orient_editable'] and c['orient']['up'] == '+Y', 'orientation kept and locked once ready')
 check(adm.patch(f'/api/admin/characters/{cid}', json={'published': True}).status_code == 200, 'publish')
 check(any(x['id'] == cid for x in other.get('/api/characters').json()), 'published visible to others')
 ov = adm.get('/api/admin/overview').json()

@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import config
+from . import orient
 from .db import DB, jdump, jparse
 from .engine import Busy, Rejected, engine
 
@@ -296,8 +297,19 @@ def char_model_path(c):
     return None
 
 
+def inspected_glb(c):
+    """Server-side preview of an uploaded model (Blender import, same as prepare), if available."""
+    if c['files_dir'] and c['inspect_status'] == 'done':
+        f = os.path.join(c['files_dir'], 'inspect.glb')
+        if os.path.isfile(f):
+            return f
+    return None
+
+
 def char_preview(c):
     """What the browser can show for a character: an FBX/GLB model or the sample animation."""
+    if inspected_glb(c):
+        return {'kind': 'glb', 'url': f'/api/characters/{c["id"]}/inspect.glb?v={int(c["updated"])}', 'inspected': True}
     m = char_model_path(c)
     if m and m.lower().endswith(MODEL_EXT):
         return {'kind': os.path.splitext(m)[1][1:].lower(),
@@ -344,7 +356,18 @@ def char_view(c, u, detail=False):
         v['works'] = db.one('SELECT COUNT(*) AS n FROM works WHERE character_id = ? AND user_id = ? AND deleted = 0',
                             c['id'], u['id'])['n']
         v['error'] = friendly_prepare_error(c) if c['status'] == 'failed' else None
+        if c['files_dir']:   # uploaded by a user: orientation can be fixed before preparing
+            rep = jparse(c['inspect'], {}) or {}
+            v['orient'] = jparse(c['orient'], None)
+            v['inspect'] = {'status': c['inspect_status'], 'flat_in_z': rep.get('flat_in_z'), 'extent': rep.get('extent'),
+                            'bones': rep.get('bones'), 'error': INSPECT_ERRORS.get(rep.get('error'), rep.get('error'))}
+            v['orient_editable'] = c['status'] in ('uploaded', 'failed') and (c['owner_id'] == u['id'] or u['role'] == 'admin')
     return v
+
+
+INSPECT_ERRORS = {'NO_ARMATURE': '这个模型没有骨骼，无法制作动作。请上传带骨骼绑定的 FBX。',
+                  'NO_SKINNED_MESH': '模型没有绑定到骨骼上的网格（蒙皮），无法制作动作。',
+                  'IMPORT_FAILED': '模型文件无法读取，可能已损坏或格式不受支持。'}
 
 
 @app.get('/api/characters')
@@ -405,6 +428,30 @@ def character_asset(cid: int, name: str, u=Depends(current_user)):
     return FileResponse(f, headers={'Cache-Control': 'private, max-age=3600'})
 
 
+@app.get('/api/characters/{cid}/inspect.glb')
+def character_inspected(cid: int, u=Depends(current_user)):
+    f = inspected_glb(get_char(cid, u))
+    if not f:
+        raise HTTPException(404, '预览还没准备好')
+    return FileResponse(f, media_type='model/gltf-binary', headers={'Cache-Control': 'private, max-age=3600'})
+
+
+@app.put('/api/characters/{cid}/orient')
+def set_orient(cid: int, body: dict, u=Depends(current_user)):
+    """Save the user's 90-degree orientation fix (3x3, three.js coordinates) -> prepare --up/--facing."""
+    c = get_char(cid, u)
+    if not c['files_dir'] or (c['owner_id'] != u['id'] and u['role'] != 'admin'):
+        raise HTTPException(403, '只能调整自己上传的角色')
+    if c['status'] not in ('uploaded', 'failed'):
+        raise HTTPException(400, '角色已经提交制作，不能再调整朝向')
+    try:
+        o = orient.solve(body.get('matrix'))
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e) or '朝向数据无效')
+    db.update('characters', cid, orient=jdump(o))
+    return {'ok': True, 'orient': o}
+
+
 @app.get('/api/characters/{cid}/sample.glb')
 def character_sample(cid: int, u=Depends(current_user)):
     c = get_char(cid, u)
@@ -441,8 +488,9 @@ def upload_character(name: str = Form(...), files: list[UploadFile] = File(...),
         shutil.rmtree(folder, ignore_errors=True)
         raise
     t = now()
-    cid = db.run('INSERT INTO characters (name, model_path, files_dir, owner_id, status, published, created, updated) '
-                 "VALUES (?, ?, ?, ?, 'uploaded', 0, ?, ?)", name, model_path, folder, u['id'], t, t)
+    # inspect_status 'waiting': the worker loads it in Blender (as prepare will) to build the preview.
+    cid = db.run('INSERT INTO characters (name, model_path, files_dir, owner_id, status, published, inspect_status, created, updated) '
+                 "VALUES (?, ?, ?, ?, 'uploaded', 0, 'waiting', ?, ?)", name, model_path, folder, u['id'], t, t)
     return char_view(db.one('SELECT * FROM characters WHERE id = ?', cid), u, detail=True)
 
 
@@ -453,6 +501,9 @@ def request_prepare(cid: int, u=Depends(current_user)):
         raise HTTPException(403, '只能制作自己上传的角色')
     if c['status'] not in ('uploaded', 'failed'):
         raise HTTPException(400, '这个角色已经在制作或已经可用')
+    if c['inspect_status'] == 'failed':
+        rep = jparse(c['inspect'], {}) or {}
+        raise HTTPException(400, INSPECT_ERRORS.get(rep.get('error'), '模型检查没有通过，无法制作'))
     busy = db.one("SELECT COUNT(*) AS n FROM characters WHERE owner_id = ? AND status IN ('pending_review', 'preparing')",
                   u['id'])['n']
     if busy >= config.MAX_PREPARING_PER_USER and u['role'] != 'admin':
@@ -1034,7 +1085,10 @@ def tick_characters():
     for c in db.all("SELECT * FROM characters WHERE status = 'preparing'"):
         if not c['remote_job']:
             try:
-                jid = engine().submit(c['project'], 'pipeline', {'model': c['model_path'], 'extra': []})
+                o = jparse(c['orient'], None) or {}
+                # --up rotates the model upright, --facing tells which way it then looks (studio/orient.py).
+                extra = [f'--up={o.get("up", "+Z")}', f'--facing={o.get("facing", "-Y")}']
+                jid = engine().submit(c['project'], 'pipeline', {'model': c['model_path'], 'extra': extra})
                 db.update('characters', c['id'], remote_job=jid)
             except Busy:
                 pass
@@ -1159,10 +1213,50 @@ def run_export(e):
     return out
 
 
+def run_inspect(c):
+    """Load an uploaded model in Blender like prepare does; write inspect.glb + report (CPU, ~10-60 s)."""
+    folder = c['files_dir']
+    glb, rep_path = os.path.join(folder, 'inspect.glb'), os.path.join(folder, 'inspect.json')
+    if config.ENGINE == 'fake':
+        # Dev: re-use the fixture's animated GLB; a model file whose name contains "lying" pretends to lie down.
+        time.sleep(1 / config.FAKE_SPEED)
+        if 'noarm' in (c['name'] or '').lower():
+            return {'ok': False, 'error': 'NO_ARMATURE'}
+        src = os.path.join(config.FAKE_FIXTURE, 'out', 'ladingwu_temporal', 'ladingwu_temporal.glb')
+        shutil.copy2(src, glb)
+        flat = 'lying' in (c['name'] or '').lower()
+        return {'ok': True, 'bones': 176, 'meshes': 5, 'flat_in_z': flat, 'extent': [1.4, 1.5, 0.6] if flat else [1.4, 0.6, 1.5]}
+    cmd = [config.BLENDER, '-b', '--factory-startup', '--python', os.path.join(HERE, 'blender_inspect.py'), '--',
+           c['model_path'], glb, rep_path]
+    with open(os.path.join(folder, 'inspect.log'), 'w') as log:
+        subprocess.run(cmd, cwd=config.CODE, stdout=log, stderr=subprocess.STDOUT, timeout=900)
+    rep = jload(rep_path, None)
+    if not rep:
+        return {'ok': False, 'error': 'IMPORT_FAILED'}
+    rep.pop('joints', None)
+    return rep
+
+
+def tick_inspect():
+    c = db.one("SELECT * FROM characters WHERE inspect_status = 'waiting' AND files_dir IS NOT NULL ORDER BY created LIMIT 1")
+    if not c:
+        return False
+    db.update('characters', c['id'], inspect_status='running')
+    try:
+        rep = run_inspect(c)
+    except Exception as ex:  # noqa: BLE001
+        traceback.print_exc()
+        rep = {'ok': False, 'error': 'IMPORT_FAILED', 'detail': str(ex)[:300]}
+    db.update('characters', c['id'], inspect_status='done' if rep.get('ok') else 'failed', inspect=jdump(rep))
+    return True
+
+
 def export_loop():
     while True:
         time.sleep(1.5)
         try:
+            if tick_inspect():
+                continue
             e = db.one("SELECT * FROM exports WHERE status = 'waiting' ORDER BY created LIMIT 1")
             if not e:
                 continue
@@ -1199,6 +1293,10 @@ def start_worker():
     # Local jobs do not survive a restart.
     db.run("UPDATE works SET kf_status = 'waiting', kf_job = NULL WHERE kf_status = 'running' AND kf_job = 'local'")
     db.run("UPDATE exports SET status = 'waiting' WHERE status = 'running'")
+    db.run("UPDATE characters SET inspect_status = 'waiting' WHERE inspect_status = 'running'")
+    # Characters uploaded before inspection existed: inspect them too (only while they can still be changed).
+    db.run("UPDATE characters SET inspect_status = 'waiting' WHERE inspect_status = 'none' AND files_dir IS NOT NULL "
+           "AND status IN ('uploaded', 'failed')")
     if not config.DISABLE_WORKER:
         threading.Thread(target=worker_loop, daemon=True).start()
         threading.Thread(target=export_loop, daemon=True).start()

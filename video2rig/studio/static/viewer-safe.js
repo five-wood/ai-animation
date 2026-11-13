@@ -1,15 +1,16 @@
 // 3D preview that never takes the page down: three.js and its loaders are imported on demand.
 // If they cannot be loaded (network, proxy, old browser), only the preview area shows a notice;
 // login, library, upload, generation, keyframes and export keep working.
-import { h, ICON } from "./util.js?v=6";
+import { h, ICON } from "./util.js?v=8";
 
 let modPromise = null;
 function loadModule() {
-  if (!modPromise) modPromise = import("./viewer.js?v=6").catch((e) => { modPromise = null; throw e; });
+  if (!modPromise) modPromise = import("./viewer.js?v=8").catch((e) => { modPromise = null; throw e; });
   return modPromise;
 }
 
-const NOOP_VIEWER = { duration: 0, clipStart: 0, setClipTime() {}, setPlaying() {}, frame() {}, message() {} };
+const NOOP_VIEWER = { duration: 0, clipStart: 0, setClipTime() {}, setPlaying() {}, frame() {}, message() {},
+  setOrientation() {}, size() { return null; }, showFront() {}, showSkeleton() { return false; }, viewFront() {} };
 
 // Same API as viewer.js createViewer(), returned synchronously.
 export function createViewer(container, opts = {}) {
@@ -67,6 +68,12 @@ export function createViewer(container, opts = {}) {
     setPlaying(p) { (real || NOOP_VIEWER).setPlaying(p); },
     setClipTime(t) { (real || NOOP_VIEWER).setClipTime(t); },
     message(text) { (real || NOOP_VIEWER).message(text); },
+    setOrientation(m, reframe) { (real || NOOP_VIEWER).setOrientation?.(m, reframe); },
+    size() { return (real || NOOP_VIEWER).size?.() ?? null; },
+    showFront(on) { (real || NOOP_VIEWER).showFront?.(on); },
+    showSkeleton(on) { return (real || NOOP_VIEWER).showSkeleton?.(on) ?? false; },
+    viewFront() { (real || NOOP_VIEWER).viewFront?.(); },
+    get ok() { return Boolean(real); },
     dispose() {
       disposed = true;
       facade._pending = null;

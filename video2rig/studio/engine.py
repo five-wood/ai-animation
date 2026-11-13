@@ -190,6 +190,7 @@ class FakeEngine:
         self._say(j, '[v2r] keyframes done', 0)
 
     def _pipeline(self, j):
+        self._say(j, f"[v2r] pipeline args {json.dumps(j['args'].get('extra', []))}", 0)
         proj = os.path.join(config.PROJ, j['project'])
         os.makedirs(os.path.join(proj, 'model'), exist_ok=True)
         if 'noarm' in os.path.basename(j['args']['model']).lower():

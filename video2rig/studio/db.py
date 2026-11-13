@@ -100,6 +100,11 @@ class DB:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         with self.conn() as c:
             c.executescript(SCHEMA)
+            # Additive migrations (old databases keep working).
+            cols = {r[1] for r in c.execute('PRAGMA table_info(characters)')}
+            for name, decl in (('orient', 'TEXT'), ('inspect_status', "TEXT NOT NULL DEFAULT 'none'"), ('inspect', 'TEXT')):
+                if name not in cols:
+                    c.execute(f'ALTER TABLE characters ADD COLUMN {name} {decl}')
 
     def conn(self):
         c = sqlite3.connect(self.path, timeout=15, isolation_level=None)

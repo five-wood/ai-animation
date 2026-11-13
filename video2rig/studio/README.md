@@ -90,6 +90,21 @@ node work\studio-dev\browser_check.cjs                  # 无头 Chrome 走完�
 假引擎约定：原始文件名含 `bad` 的视频会模拟“两视角检查不通过”，文件名含 `noarm` 的模型会模拟“没有骨骼”。
 夹具来自服务器 `m11101_tex/out/ladingwu_temporal`（`work/studio-dev/fixture/`，不进 git）。
 
+## 上传角色的朝向（转正）
+
+有些 FBX 导入后是躺着的（prepare 日志里的 `model is flat in Z`）或背对相机。用户在网页上转正后再提交制作：
+
+1. 上传后，服务器用 Blender 按 `prepare` 完全相同的方式读模型（`studio/blender_inspect.py` 调用 `load_model(up="+Z")`，
+   同样的骨架选择、道具删除、蒙皮修复），导出预览 `inspect.glb` 和报告（骨骼数、尺寸、是否躺着）。没有骨骼 / 没有蒙皮 /
+   文件损坏会在这一步直接告诉用户，不会等到训练才失败。
+2. 角色弹窗里的“调整朝向”：前后翻转、左右侧倒、水平转身、上下颠倒（每次 90°），地面黄色箭头 = 正面相机方向，
+   可显示骨骼、切到正面视角；高度明显小于宽度时提示“看起来是躺着的”，提交时再确认一次。
+3. 保存的是 3×3 整数旋转矩阵（three.js 坐标）。`studio/orient.py` 把它精确换算成 prepare 的 `--up`（哪根轴朝上）和
+   `--facing`（立起来后朝哪边），24 种朝向一一对应（`tools/test_orient.py` 全部往返验证）。提交制作后锁定，不能再改。
+
+2026-11-13 实测：把 `11101_nogun_exam_textured.fbx` 转成仰面躺着、头朝侧面的副本上传 → 网页上“水平转身 ×3、前后翻转 ×3”
+→ 保存为 `--up=-X --facing=+X` → 真实 `prepare` 生成的参考图站立、正面朝前，和原模型的参考图一致。
+
 ## 3D 预览降级
 
 three.js 由 `static/viewer-safe.js` 按需动态加载（`viewer.js` 才引用 `/vendor/*`），所以：

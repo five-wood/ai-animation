@@ -1,6 +1,6 @@
-import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=6";
-import { createViewer } from "./viewer-safe.js?v=6";
-import { openBench } from "./bench.js?v=6";
+import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=8";
+import { createViewer } from "./viewer-safe.js?v=8";
+import { openBench } from "./bench.js?v=8";
 
 const app = document.getElementById("app");
 const S = { user: null, config: null, cleanup: null };
@@ -183,11 +183,22 @@ async function openCharacter(id, refresh) {
   const m = modal({ wide: true, body: h("div", { class: "modal-body", style: { padding: 0 } }, body), onClose: () => viewer?.dispose() });
   m.box.prepend(h("div", { style: { position: "absolute", right: "12px", top: "12px", zIndex: 5 } }, h("button.icon-btn", { "aria-label": "关闭", html: ICON.x, onclick: () => m.close() })));
   m.box.style.position = "relative";
-  if (c.preview) {
+  // A freshly uploaded model is first loaded on the server exactly as training will load it.
+  const inspecting = c.inspect && ["waiting", "running"].includes(c.inspect.status);
+  let orientTool = null;
+  if (inspecting) {
+    viewerBox.append(h("div.v-state", h("div", h("div.spinner"), "正在读取模型（约半分钟），读取完成后可以预览和调整朝向…")));
+    const t = setInterval(async () => {
+      if (!viewerBox.isConnected) { clearInterval(t); return; }
+      try { const n = await api(`/api/characters/${id}`); if (!["waiting", "running"].includes(n.inspect?.status)) { clearInterval(t); m.close(); openCharacter(id, refresh); } } catch { clearInterval(t); }
+    }, 3000);
+  } else if (c.preview) {
     viewer = createViewer(viewerBox, { fallbackImage: c.has_reference ? `/api/characters/${c.id}/reference` : c.thumb });
-    viewer.load(c.preview.url, c.preview.kind).then((r) => { if (r && !r.hasAnimation) viewer.message(""); }).catch(() => {});
+    const loading = viewer.load(c.preview.url, c.preview.kind).then((r) => { if (r && !r.hasAnimation) viewer.message(""); return r; });
+    loading.catch(() => {});
+    if (c.orient_editable && c.preview.inspected) orientTool = orientationTool(c, viewer, loading);
   } else {
-    viewerBox.append(h("div.v-state", "这个角色暂时没有可预览的模型"));
+    viewerBox.append(h("div.v-state", c.inspect?.status === "failed" ? "模型无法读取" : "这个角色暂时没有可预览的模型"));
   }
   const actions = [];
   if (c.status === "ready") {
@@ -195,21 +206,30 @@ async function openCharacter(id, refresh) {
     if (c.has_reference) actions.push(h("a.btn.ghost.block", { href: `/api/characters/${c.id}/reference?download=1` }, h("span", { html: ICON.download }), "下载参考图"));
   }
   const info = [];
+  const inspectFailed = c.inspect?.status === "failed";
+  if (inspectFailed) info.push(h("div.note.bad", c.inspect.error || "模型无法读取"));
+  if (orientTool) info.push(orientTool.panel);
+  const submit = async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      if (orientTool) {
+        if (!await orientTool.confirmIfNeeded()) { btn.disabled = false; return; }
+        await orientTool.save();
+      }
+      await api(`/api/characters/${c.id}/prepare`, { method: "POST" });
+      toast("已提交", "ok"); m.close(); refresh?.();
+    } catch (ex) { toast(errorText(ex), "err"); btn.disabled = false; }
+  };
   if (c.status === "uploaded") {
-    info.push(h("div.note", "模型已上传。系统需要先“认识”这个角色（大约 30–60 分钟），之后才能用视频给它做动作。"));
-    actions.push(h("button.btn.primary.lg.block", { onclick: async (e) => {
-      e.target.disabled = true;
-      try { await api(`/api/characters/${c.id}/prepare`, { method: "POST" }); toast("已提交", "ok"); m.close(); refresh?.(); }
-      catch (ex) { toast(errorText(ex), "err"); e.target.disabled = false; }
-    } }, "提交制作"));
+    info.push(h("div.note", "确认角色站立、正面朝向黄色箭头后，提交制作。系统需要先“认识”这个角色（大约 30–60 分钟），之后才能用视频给它做动作。"));
+    if (!inspectFailed && !inspecting) actions.push(h("button.btn.primary.lg.block", { onclick: submit }, "朝向没问题，提交制作"));
   }
   if (c.status === "pending_review") info.push(h("div.note.warn", "已提交，等待管理员审核后开始制作。"));
   if (c.status === "preparing") info.push(h("div.note", `正在制作：${c.progress?.text || ""}`), h("div.progress", h("i", { style: { width: (c.progress?.percent || 2) + "%" } })), h("p", { style: { color: "var(--dim)", fontSize: "12px" } }, "制作完成后会出现在“角色库”，可以先关闭这个窗口。"));
-  if (c.status === "failed") {
+  if (c.status === "failed" && !inspectFailed) {
     info.push(h("div.note.bad", c.error || "制作失败"));
-    actions.push(h("button.btn.ghost.block", { onclick: async () => {
-      try { await api(`/api/characters/${c.id}/prepare`, { method: "POST" }); toast("已重新提交", "ok"); m.close(); refresh?.(); } catch (ex) { toast(errorText(ex), "err"); }
-    } }, "重新提交"));
+    actions.push(h("button.btn.ghost.block", { onclick: submit }, "调整后重新提交"));
   }
   if (c.mine && ["uploaded", "failed"].includes(c.status)) {
     actions.push(h("button.btn.danger.block", { onclick: async () => {
@@ -224,6 +244,76 @@ async function openCharacter(id, refresh) {
     info,
     h("div", { style: { flex: 1 } }),
     actions);
+}
+
+// ------------------------------------------------------------ orientation fix (90-degree steps)
+// Matrices are row-major 3x3 integer rotations in three.js coordinates (+Y up, +Z = towards the front camera).
+const I3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+function mul3(a, b) {
+  const r = [];
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) r.push(a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j]);
+  return r;
+}
+function rot3(axis, q) {
+  const c = [1, 0, -1, 0][((q % 4) + 4) % 4], s = [0, 1, 0, -1][((q % 4) + 4) % 4];
+  if (axis === "x") return [1, 0, 0, 0, c, -s, 0, s, c];
+  if (axis === "y") return [c, 0, s, 0, 1, 0, -s, 0, c];
+  return [c, -s, 0, s, c, 0, 0, 0, 1];
+}
+function orientationTool(c, viewer, loading) {
+  let M = c.orient?.matrix?.length === 9 ? [...c.orient.matrix] : [...I3];
+  let changed = false;
+  const status = h("div.orient-status");
+  const apply = (R) => {
+    M = mul3(R, M);           // rotate in world space (as the user sees it)
+    changed = true;
+    viewer.setOrientation(M);
+    viewer.viewFront();
+    updateStatus();
+    panel.dataset.matrix = M.join(",");
+  };
+  function updateStatus() {
+    const s = viewer.size();
+    if (!s) { clear(status); return; }
+    const lying = s[1] < 0.75 * Math.max(s[0], s[2]);
+    // Height vs width is only a hint (a wide creature lying on its side can look "tall enough"), so the
+    // positive case asks the user to check rather than claiming the model is upright.
+    clear(status, lying
+      ? h("div.note.warn", "模型看起来是躺着的（比站立时矮很多）。用“前后翻转”或“左右侧倒”把它立起来。")
+      : h("div.note", "请确认三点：", h("b", "头朝上"), "、", h("b", "脚踩在网格地面上"), "、", h("b", "脸朝黄色箭头"), "。都对了再提交。"));
+  }
+  const btn = (label, title, icon, R) => h("button.orient-btn", { title, onclick: () => apply(R) }, h("span", { html: icon }), label);
+  const skel = h("label.orient-check", h("input", { type: "checkbox", onchange: (e) => { if (!viewer.showSkeleton(e.target.checked) && e.target.checked) toast("这个预览里没有找到骨骼"); } }), "显示骨骼");
+  const panel = h("div.orient-panel",
+    h("div.orient-title", h("b", "调整朝向"), h("button", { class: "orient-reset", onclick: () => { M = [...I3]; changed = true; viewer.setOrientation(M); viewer.viewFront(); updateStatus(); } }, "还原")),
+    h("p.orient-hint", "让角色", h("b", "站在地面上"), "，", h("b", "脸朝黄色箭头"), "（正面相机）。每次转 90°。"),
+    h("div.orient-grid",
+      btn("前后翻转", "绕左右方向轴转 90°（躺着/趴着时用）", ICON.flipX, rot3("x", -1)),
+      btn("左右侧倒", "绕前后方向轴转 90°（侧躺时用）", ICON.flipZ, rot3("z", 1)),
+      btn("水平转身", "绕竖直轴转 90°（正面不对时用）", ICON.turnY, rot3("y", 1)),
+      btn("上下颠倒", "转 180°（头朝下时用）", ICON.upside, rot3("x", 2))),
+    h("div.row", skel, h("button.btn.sm.ghost", { style: { marginLeft: "auto" }, onclick: () => viewer.viewFront() }, "正面视角")),
+    status);
+  loading.then(() => {
+    viewer.setOrientation(M);
+    viewer.showFront(true);
+    viewer.viewFront();
+    updateStatus();
+  }).catch(() => clear(panel, h("div.note.warn", "3D 预览没有加载出来，暂时无法调整朝向。可以先提交，制作出来的参考图如果是躺着的，再联系管理员。")));
+  return {
+    panel,
+    async confirmIfNeeded() {
+      const s = viewer.size();
+      if (s && s[1] < 0.75 * Math.max(s[0], s[2])) {
+        return confirmBox("模型看起来是躺着的", "按现在的朝向制作，参考图里的角色会是躺着的，生成的动画也会不对。确定要这样提交吗？", { ok: "仍然提交" });
+      }
+      return true;
+    },
+    async save() {
+      if (!changed && !c.orient) return;
+      await api(`/api/characters/${c.id}/orient`, { method: "PUT", body: { matrix: M } });
+    },
+  };
 }
 
 function uploadCharacter(done) {

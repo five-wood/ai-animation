@@ -5,7 +5,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { TGALoader } from "three/addons/loaders/TGALoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { h, ICON } from "./util.js?v=6";
+import { h, ICON } from "./util.js?v=8";
 
 // Missing or mislabelled .tga textures must not break a model: fall back to a plain grey texel.
 class SafeTGALoader extends TGALoader {
@@ -125,6 +125,10 @@ export function createViewer(container, { autoplay = true, hint = "拖动旋转 
       for (const m of mats) { for (const v of Object.values(m)) if (v?.isTexture) v.dispose(); m.dispose(); }
     });
     model = null; mixer = null; action = null; duration = 0;
+    pivot = null; skeletonOf = null;
+    setSkeleton(false);
+    showFront = false;
+    updateMarkers();
   }
 
   async function load(url, kind = "glb") {
@@ -163,8 +167,14 @@ export function createViewer(container, { autoplay = true, hint = "拖动旋转 
         }
       }
     });
-    model = obj;
-    scene.add(obj);
+    // Orientation pivot: the user's 90-degree fix rotates this group, the model inside stays untouched.
+    pivot = new THREE.Group();
+    pivot.add(obj);
+    obj.updateMatrixWorld(true);
+    const b0 = new THREE.Box3().setFromObject(obj, true);
+    if (!b0.isEmpty()) obj.position.sub(b0.getCenter(new THREE.Vector3()));   // rotate about the model centre
+    model = pivot;
+    scene.add(pivot);
     const clip = clips.find((c) => c.duration > 0);
     if (clip) {
       mixer = new THREE.AnimationMixer(obj);
@@ -175,12 +185,66 @@ export function createViewer(container, { autoplay = true, hint = "拖动旋转 
       duration = clip.duration - clipStart;
       mixer.setTime(clipStart);
     }
-    obj.updateMatrixWorld(true);
-    box = new THREE.Box3().setFromObject(obj, true);
+    skeletonOf = obj;
+    ground();
     frame();
     state.replaceChildren();
     needsRender = true;
     return { duration, clipStart, hasAnimation: Boolean(clip) };
+  }
+
+  // Keep the (rotated) model standing on the grid and recompute its bounds.
+  function ground() {
+    if (!pivot) return;
+    pivot.position.set(0, 0, 0);
+    pivot.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(pivot, true);
+    if (!b.isEmpty()) pivot.position.y = -b.min.y;
+    pivot.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(pivot, true);
+    updateMarkers();
+  }
+
+  // Orientation helpers: an arrow on the floor pointing to the front camera (+Z) and the skeleton overlay.
+  let pivot = null, skeletonOf = null, frontArrow = null, skelHelper = null;
+  function updateMarkers() {
+    if (frontArrow) {
+      scene.remove(frontArrow);
+      frontArrow.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+      frontArrow = null;
+    }
+    if (!showFront || !box || box.isEmpty()) return;
+    const s = box.getSize(new THREE.Vector3());
+    const r = Math.max(s.x, s.z, s.y * 0.5) || 1;
+    const c = box.getCenter(new THREE.Vector3());
+    const len = r * 0.9;
+    frontArrow = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0xf9cf00, transparent: true, opacity: 0.9, depthTest: false });
+    const shaft = new THREE.Mesh(new THREE.PlaneGeometry(len * 0.08, len * 0.7), mat);
+    shaft.rotation.x = -Math.PI / 2;
+    shaft.position.set(0, 0, len * 0.35 + s.z * 0.5);
+    const head = new THREE.Mesh(new THREE.CircleGeometry(len * 0.16, 3), mat.clone());
+    head.rotation.x = -Math.PI / 2;
+    head.rotation.z = -Math.PI / 2;
+    head.position.set(0, 0, len * 0.75 + s.z * 0.5);
+    frontArrow.add(shaft, head);
+    frontArrow.position.set(c.x, box.min.y + 0.002 * r, c.z);
+    frontArrow.renderOrder = 10;
+    scene.add(frontArrow);
+  }
+  let showFront = false;
+  function setSkeleton(on) {
+    if (skelHelper) { scene.remove(skelHelper); skelHelper.dispose?.(); skelHelper = null; }
+    if (on && skeletonOf) {
+      skelHelper = new THREE.SkeletonHelper(skeletonOf);
+      skelHelper.material.depthTest = false;
+      skelHelper.material.linewidth = 2;
+      skelHelper.material.color?.set?.(0x7a6cff);
+      skelHelper.renderOrder = 11;
+      scene.add(skelHelper);
+    }
+    needsRender = true;
+    return Boolean(skelHelper && skelHelper.bones?.length);
   }
 
   return {
@@ -198,8 +262,33 @@ export function createViewer(container, { autoplay = true, hint = "拖动旋转 
       needsRender = true;
     },
     message(text) { state.textContent = text || ""; },
+    // Orientation (three.js coordinates, row-major 3x3 of integers). Grounds the model and re-frames.
+    setOrientation(m, reframe = true) {
+      if (!pivot) return;
+      const M = new THREE.Matrix4().set(m[0], m[1], m[2], 0, m[3], m[4], m[5], 0, m[6], m[7], m[8], 0, 0, 0, 0, 1);
+      pivot.quaternion.setFromRotationMatrix(M);
+      ground();
+      if (reframe) frame();
+      needsRender = true;
+    },
+    // Bounding-box size after the current orientation (to detect a lying model).
+    size() { return box && !box.isEmpty() ? box.getSize(new THREE.Vector3()).toArray() : null; },
+    showFront(on) { showFront = on; updateMarkers(); needsRender = true; },
+    showSkeleton: setSkeleton,
+    // Look from the front camera direction (+Z), as the reference picture will.
+    viewFront() {
+      if (!box || box.isEmpty()) return;
+      const s = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+      const r = Math.max(s.x, s.y, s.z) || 1;
+      const dist = r / (2 * Math.tan((camera.fov * Math.PI) / 360)) * 1.6;
+      camera.position.set(c.x + dist * 0.35, c.y + r * 0.15, c.z + dist);
+      controls.target.copy(c);
+      controls.update();
+      needsRender = true;
+    },
     dispose() {
       disposed = true;
+      setSkeleton(false);
       cancelAnimationFrame(raf);
       ro.disconnect();
       disposeModel();
