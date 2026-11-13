@@ -1,4 +1,4 @@
-# 动作工坊（video2rig studio）
+# 女娲-动作工坊（video2rig studio）
 
 面向普通用户的网页平台：**http://10.0.3.117:8700**（systemd 服务 `video2rig-studio`）。
 内部看板 http://10.0.3.117:8600 保持不变，两者共用同一个 GPU 任务队列。

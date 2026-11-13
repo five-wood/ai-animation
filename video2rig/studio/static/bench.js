@@ -1,8 +1,8 @@
 // 动作制作台: reference + video upload + generate (left), preview / keyframes timeline (centre),
 // works / keyframes / export (right).
-import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=5";
-import { createViewer } from "./viewer-safe.js?v=5";
-import * as K from "/kf-core.js?v=5";
+import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=6";
+import { createViewer } from "./viewer-safe.js?v=6";
+import * as K from "/kf-core.js?v=6";
 
 const ACTIVE = ["waiting", "queued", "running"];
 const ORIGIN_LABEL = { auto: "自动", ladder: "过渡", artist: "手动" };

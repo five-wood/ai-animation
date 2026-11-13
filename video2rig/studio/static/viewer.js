@@ -5,7 +5,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { TGALoader } from "three/addons/loaders/TGALoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { h, ICON } from "./util.js?v=5";
+import { h, ICON } from "./util.js?v=6";
 
 // Missing or mislabelled .tga textures must not break a model: fall back to a plain grey texel.
 class SafeTGALoader extends TGALoader {

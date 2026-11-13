@@ -1,6 +1,6 @@
-import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=5";
-import { createViewer } from "./viewer-safe.js?v=5";
-import { openBench } from "./bench.js?v=5";
+import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=6";
+import { createViewer } from "./viewer-safe.js?v=6";
+import { openBench } from "./bench.js?v=6";
 
 const app = document.getElementById("app");
 const S = { user: null, config: null, cleanup: null };
@@ -44,7 +44,7 @@ function shell(active, render) {
   const closeMenu = () => { menu.hidden = true; };
   document.addEventListener("click", closeMenu);
   const top = h("header.topbar",
-    h("a.brand", { href: "#/" }, h("span.brand-mark", { html: ICON.logo }), "动作工坊"),
+    h("a.brand", { href: "#/" }, h("span.brand-mark", { html: ICON.logo }), "女娲-动作工坊"),
     h("nav.top-nav", nav.map(([k, href, label]) => h(`a${k === active ? ".on" : ""}`, { href }, label))),
     h("div.top-right", { style: { position: "relative" } }, chip, menu));
   const body = active === "bench" ? h("div", { style: { flex: "1", minHeight: "0", display: "flex" } }) : h("main.page");
@@ -116,7 +116,7 @@ function loginPage() {
   render();
   clear(app, h("div.auth",
     h("section.auth-hero",
-      h("div.brand", { style: { position: "absolute", top: "40px", left: "56px", fontSize: "18px" } }, h("span.brand-mark", { html: ICON.logo }), "动作工坊"),
+      h("div.brand", { style: { position: "absolute", top: "40px", left: "56px", fontSize: "18px" } }, h("span.brand-mark", { html: ICON.logo }), "女娲-动作工坊"),
       h("h1", "一段视频，", h("br"), "让你的角色", h("em", "动起来")),
       h("p", "选择角色、下载参考图，用任意 AI 视频工具生成一段双视角视频，上传后一键得到可用于游戏引擎的骨骼动画。"),
       h("div.auth-steps", ["选角色", "下参考图", "传视频", "导出动画"].map((s, i) => h("div", h("b", i + 1), s)))),
