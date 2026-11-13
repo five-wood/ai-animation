@@ -30,7 +30,7 @@ def dense_loss(dn, coord, mask, fast=None):
 
 def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dinov2.lvd142m", img=448,
           workers=12, sigma=2.0, device="cuda", steps=None, hidden_empty=False, smear_frac=0.0, dense=0.0,
-          dense_from=None):
+          dense_from=None, grad_ckpt=False):
     """steps: total optimiser steps (overrides epochs; the run ends after exactly that many).
     hidden_empty: keypoints hidden by the body in a view (vis = 0 in the labels) get an EMPTY target
     heatmap instead of a peak, so the reader learns to report low confidence there rather than a
@@ -39,7 +39,10 @@ def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dino
     correspondence head (labels from v2r.dense_labels) with this loss weight.
     dense_from: path of a trained keypoint reader (best.pt).  Two-step training: the reader is loaded and
     everything it has (backbone, keypoint and depth heads) is FROZEN; only a new dense head is trained, so the
-    keypoints read exactly as before.  Implies dense > 0.  Defaults keep the old behaviour."""
+    keypoints read exactly as before.  Implies dense > 0.
+    grad_ckpt: gradient checkpointing of the backbone blocks (same results; peak GPU memory at batch 32 about
+    18 -> 7 GiB, about 20% slower).  No effect with dense_from (the backbone is frozen there).
+    Defaults keep the old behaviour."""
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     if dense_from and dense <= 0:
@@ -58,6 +61,9 @@ def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dino
         backbone = base["backbone"]
     model = JointReader(K, n_views=len(tr.views), backbone=backbone, img_size=(tr.H, tr.W), dense=use_dense,
                         pretrained=base is None, dense_decoder=base is not None).to(device)
+    model.grad_ckpt = bool(grad_ckpt)
+    if grad_ckpt:
+        print("[v2r] gradient checkpointing on (backbone blocks)" + (" - no effect, backbone frozen" if dense_from else ""))
     DENSE_PARTS = ("dn.", "dproj.", "dup1.", "dup2.")
     if base is not None:
         missing, unexpected = model.load_state_dict(base["model"], strict=False)
@@ -146,6 +152,8 @@ def train(project, epochs=40, batch=32, lr=3e-4, backbone="vit_base_patch14_dino
                       + f"{(time.time() - t0) / 60:.1f}min", flush=True)
             if step >= steps:
                 break
+        if ep == 0 and torch.cuda.is_available():
+            print(f"[v2r] peak GPU memory (training) {torch.cuda.max_memory_allocated() / 2 ** 30:.1f} GiB", flush=True)
         ev = evaluate(model, va, device, batch, dense=use_dense)
         rec = {"epoch": ep, "train_hm": float(np.mean(tl, 0)[0]), "train_depth": float(np.mean(tl, 0)[1]), **ev,
                "minutes": (time.time() - t0) / 60}

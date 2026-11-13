@@ -3,6 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 import timm
 
 
@@ -47,6 +48,9 @@ class JointReader(nn.Module):
             self.dup2 = Up(192, 128)
         self.n_kp = n_kp
         self.patch = 14
+        # gradient checkpointing of the backbone blocks: activations are recomputed in the backward pass
+        # instead of kept (same results, ~1/3 of the memory, ~20% slower).  Training only; off by default.
+        self.grad_ckpt = False
 
     def features(self, x, view):
         B, _, H, W = x.shape
@@ -58,8 +62,9 @@ class JointReader(nn.Module):
         n_blocks = len(bb.blocks)
         want = {(l % n_blocks) for l in self.layers}
         outs = []
+        ckpt = self.grad_ckpt and self.training and torch.is_grad_enabled()
         for i, blk in enumerate(bb.blocks):
-            t = blk(t)
+            t = checkpoint(blk, t, use_reentrant=False) if ckpt else blk(t)
             if i in want:
                 outs.append(bb.norm(t) if i == n_blocks - 1 else t)
         npt = bb.num_prefix_tokens
