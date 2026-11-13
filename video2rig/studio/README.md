@@ -90,6 +90,20 @@ node work\studio-dev\browser_check.cjs                  # 无头 Chrome 走完�
 假引擎约定：原始文件名含 `bad` 的视频会模拟“两视角检查不通过”，文件名含 `noarm` 的模型会模拟“没有骨骼”。
 夹具来自服务器 `m11101_tex/out/ladingwu_temporal`（`work/studio-dev/fixture/`，不进 git）。
 
+## 3D 预览降级
+
+three.js 由 `static/viewer-safe.js` 按需动态加载（`viewer.js` 才引用 `/vendor/*`），所以：
+
+| 情况 | 页面表现 |
+|---|---|
+| 3D 库（`/vendor/*`）加载失败 | 只有 3D 区域显示“3D 预览暂时无法加载”+ 重试，底下淡显参考图；其余功能全部正常 |
+| 模型文件（FBX/GLB）下载或解析失败 | 3D 区域显示“模型加载失败”+ 重试；若当时在“3D 模型”视图会自动切到“拟合效果”视频 |
+| 浏览器没有 WebGL | 3D 区域显示“当前浏览器无法显示 3D”+ 换浏览器建议 |
+| 运行中 WebGL 上下文丢失 | 提示刷新页面 |
+| 页面主脚本 12 秒内没有启动 | 显示“页面没有正常加载”+ 刷新按钮（不会白屏） |
+
+回归：`node work/studio-dev/no3d_probe.cjs`（本地假引擎，覆盖前四种情况）。
+
 ## 已知限制
 
 - 用户上传角色的朝向默认 `-Y`（Blender 正面），朝向不对时需要管理员在内部看板用正确参数重新制作。

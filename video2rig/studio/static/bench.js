@@ -1,8 +1,8 @@
 // 动作制作台: reference + video upload + generate (left), preview / keyframes timeline (centre),
 // works / keyframes / export (right).
-import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=4";
-import { createViewer } from "./viewer.js?v=4";
-import * as K from "/kf-core.js?v=4";
+import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=5";
+import { createViewer } from "./viewer-safe.js?v=5";
+import * as K from "/kf-core.js?v=5";
 
 const ACTIVE = ["waiting", "queued", "running"];
 const ORIGIN_LABEL = { auto: "自动", ladder: "过渡", artist: "手动" };
@@ -541,7 +541,7 @@ export function openBench(container, { characterId, workId, config }) {
       const pane = h("div.pane");
       stage.append(pane);
       if (S.char.preview) {
-        S.idleViewer = createViewer(pane);
+        S.idleViewer = createViewer(pane, { fallbackImage: S.char.has_reference ? `/api/characters/${S.char.id}/reference` : null });
         S.idleViewer.load(S.char.preview.url, S.char.preview.kind).catch(() => {});
       }
       stage.append(h("div", { style: { position: "absolute", left: "50%", bottom: "28px", transform: "translateX(-50%)", zIndex: 3 } },
@@ -633,13 +633,16 @@ export function openBench(container, { characterId, workId, config }) {
       v.addEventListener("loadedmetadata", () => { if (!P.frames && v === S.srcVideo) P.frames = Math.round(v.duration * P.fps); syncVideos(); drawTimelineKeys(); });
       v.addEventListener("ended", () => { if (P.playing && v === master()) { v.currentTime = 0; v.play().catch(() => {}); } });
     }
-    S.viewer = createViewer(modelPane, { autoplay: false });
+    S.viewer = createViewer(modelPane, { autoplay: false, fallbackImage: w.thumb });
     const wid = w.id;
     S.viewer.load(`/api/works/${w.id}/media/model.glb`, "glb").then((r) => {
       if (!r || S.work?.id !== wid) return;
       P.clipStart = r.clipStart; P.modelDur = r.duration;
       applyModelTime();
-    }).catch(() => {});
+    }).catch(() => {
+      // No 3D: the fit video (joints + the character's motion) still shows the result.
+      if (S.work?.id === wid && S.mode === "3d" && w.files?.compare) { S.mode = "fit"; setMode("fit", seg); }
+    });
     setMode(S.mode, seg);
     buildTimeline();
     loadKeys();

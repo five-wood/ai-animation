@@ -1,11 +1,12 @@
-import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=4";
-import { createViewer } from "./viewer.js?v=4";
-import { openBench } from "./bench.js?v=4";
+import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=5";
+import { createViewer } from "./viewer-safe.js?v=5";
+import { openBench } from "./bench.js?v=5";
 
 const app = document.getElementById("app");
 const S = { user: null, config: null, cleanup: null };
 window.addEventListener("studio:logout", () => { S.user = null; route(); });
 
+window.__studioBooted = true;
 async function boot() {
   try {
     const [me, cfg] = await Promise.all([api("/api/auth/me"), api("/api/config")]);
@@ -183,7 +184,7 @@ async function openCharacter(id, refresh) {
   m.box.prepend(h("div", { style: { position: "absolute", right: "12px", top: "12px", zIndex: 5 } }, h("button.icon-btn", { "aria-label": "关闭", html: ICON.x, onclick: () => m.close() })));
   m.box.style.position = "relative";
   if (c.preview) {
-    viewer = createViewer(viewerBox);
+    viewer = createViewer(viewerBox, { fallbackImage: c.has_reference ? `/api/characters/${c.id}/reference` : c.thumb });
     viewer.load(c.preview.url, c.preview.kind).then((r) => { if (r && !r.hasAnimation) viewer.message(""); }).catch(() => {});
   } else {
     viewerBox.append(h("div.v-state", "这个角色暂时没有可预览的模型"));

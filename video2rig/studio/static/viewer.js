@@ -5,7 +5,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { TGALoader } from "three/addons/loaders/TGALoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { h, ICON } from "./util.js?v=4";
+import { h, ICON } from "./util.js?v=5";
 
 // Missing or mislabelled .tga textures must not break a model: fall back to a plain grey texel.
 class SafeTGALoader extends TGALoader {
@@ -15,19 +15,28 @@ class SafeTGALoader extends TGALoader {
   }
 }
 
-export function createViewer(container, { autoplay = true, hint = "拖动旋转 · 滚轮缩放 · 右键平移" } = {}) {
+export function createViewer(container, { autoplay = true, hint = "拖动旋转 · 滚轮缩放 · 右键平移", fallbackImage = null } = {}) {
   const root = h("div.viewer", { style: { width: "100%", height: "100%" } });
   const state = h("div.v-state");
   const tools = h("div.v-tools", h("button.icon-btn", { title: "重置视角", "aria-label": "重置视角", html: ICON.reset, onclick: () => frame() }));
   root.append(state, h("div.v-hint", hint), tools);
   container.append(root);
 
+  const notice = (title, text, retry) => {
+    state.replaceChildren(h("div",
+      h("div", { style: { fontSize: "14px", color: "var(--w80)", marginBottom: "4px" } }, title),
+      h("div", text),
+      retry && h("button.btn.sm", { style: { marginTop: "12px" }, onclick: retry }, h("span", { html: ICON.reset }), "重试")));
+  };
   let renderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   } catch {
-    state.textContent = "当前浏览器不支持 3D 预览（WebGL 不可用）。";
-    return { load: async () => { throw new Error("WebGL 不可用"); }, setTime() {}, dispose() { root.remove(); }, duration: 0, el: root };
+    if (fallbackImage) root.prepend(h("img.v-fallback", { src: fallbackImage, alt: "" }));
+    notice("当前浏览器无法显示 3D", "可能是显卡加速被关闭了，可以换用最新版 Chrome / Edge。不影响生成动画、标记关键帧和导出。");
+    tools.hidden = true;
+    return { el: root, duration: 0, clipStart: 0, load: async () => { throw new Error("WebGL 不可用"); },
+      setClipTime() {}, setPlaying() {}, frame() {}, message() {}, dispose() { root.remove(); } };
   }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -68,6 +77,12 @@ export function createViewer(container, { autoplay = true, hint = "拖动旋转 
   ro.observe(root);
   size();
   controls.addEventListener("change", () => { needsRender = true; });
+  // GPU reset / too many WebGL contexts: say so instead of leaving a frozen or black canvas.
+  renderer.domElement.addEventListener("webglcontextlost", (e) => {
+    e.preventDefault();
+    notice("3D 预览已中断", "显卡资源被系统回收了。刷新页面即可恢复，不影响其他操作。");
+  });
+  renderer.domElement.addEventListener("webglcontextrestored", () => { state.replaceChildren(); needsRender = true; });
 
   function frame() {
     if (!box || box.isEmpty()) return;
@@ -125,7 +140,7 @@ export function createViewer(container, { autoplay = true, hint = "拖动旋转 
       clips = (kind === "fbx" ? res.animations : res.animations) || [];
     } catch (e) {
       if (disposed) return null;
-      state.textContent = "模型加载失败，请稍后重试。";
+      notice("模型加载失败", "可能是网络不稳定或文件损坏。不影响生成动画、标记关键帧和导出。", () => { load(url, kind).catch(() => {}); });
       throw e;
     }
     if (disposed) return null;

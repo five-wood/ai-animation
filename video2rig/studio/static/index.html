@@ -5,15 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>动作工坊 · 用视频做角色动画</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23503be3'/%3E%3Cpath d='M9 22l5-12 4 8 2-4 3 8' stroke='%23f9cf00' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/app.css?v=4">
+<link rel="stylesheet" href="/static/app.css?v=5">
 <script type="importmap">
 { "imports": { "three": "/vendor/three.module.js", "three/addons/": "/vendor/addons/" } }
 </script>
 </head>
 <body>
-<div id="app" aria-live="polite"></div>
+<div id="app" aria-live="polite"><div class="boot-note"><div class="spinner"></div>正在打开动作工坊…</div></div>
 <div id="toasts" class="toasts" role="status"></div>
 <div id="modalRoot"></div>
-<script type="module" src="/static/main.js?v=4"></script>
+<script type="module" src="/static/main.js?v=5"></script>
+<script>
+  // If the page script never starts (very old browser, blocked script, network error), say so instead of a blank page.
+  setTimeout(function () {
+    var app = document.getElementById("app");
+    if (window.__studioBooted || !app || !app.querySelector(".boot-note")) return;
+    app.innerHTML = '<div class="boot-note"><b>页面没有正常加载</b><br>请刷新页面重试；如果一直这样，请换用最新版的 Chrome 或 Edge 浏览器。' +
+      '<br><button class="btn primary" style="margin-top:16px" onclick="location.reload()">刷新页面</button></div>';
+  }, 12000);
+</script>
 </body>
 </html>
