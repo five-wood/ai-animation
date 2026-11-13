@@ -32,8 +32,9 @@ static=code/'web/static'
 release=(static/'releases'/args.release).resolve(strict=True)
 assert release.parent==static/'releases'
 manifest=json.loads((release/'manifest.json').read_text())
+STATIC_NAMES={'index.html','app.css','app.js','run-page.js','results.js','task-ui.js','keyframes.js','keyframes-core.js'}
 for name,expected in manifest['files'].items():
-    assert name in {'index.html','app.css','app.js','run-page.js','results.js','task-ui.js'}
+    assert name in STATIC_NAMES
     assert hashlib.sha256((release/name).read_bytes()).hexdigest()==expected
 entry=static/'index.html'
 assert hashlib.sha256(entry.read_bytes()).hexdigest()==args.expected_entry_sha256
@@ -56,7 +57,7 @@ if not args.apply:
     print('Dry run passed; no production files changed')
     raise SystemExit(0)
 # Restrict touched files to these Web modules; no algorithms, no config/data changes.
-names=['server.py','project_store.py','task_monitor.py']
+names=['server.py','project_store.py','task_monitor.py','keyframes_store.py']
 backup=root/'web-release-backups'/args.release
 assert not backup.exists(),'Backup already exists; inspect before retry'
 backup.mkdir(parents=True)
@@ -93,6 +94,9 @@ try:
     with urllib.request.urlopen('http://127.0.0.1:8600/api/tasks',timeout=10) as r:
         snapshot=json.load(r)
     assert 'tasks' in snapshot and snapshot['monitor']['available']
+    with urllib.request.urlopen('http://127.0.0.1:8600/openapi.json',timeout=10) as r:
+        paths=json.load(r)['paths']
+    assert '/api/projects/{p}/out/{name}/keyframes' in paths and '/api/projects/{p}/out/{name}/keyframes/artist' in paths,'keyframe routes missing'
     subprocess.run(['systemctl','is-active','--quiet','video2rig-web'],check=True)
     print('DEPLOYED',args.release,'Web-only backend + static entry')
     print('Operational backup (not publicly served):',backup)

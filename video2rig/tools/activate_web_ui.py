@@ -22,7 +22,7 @@ release = (root / 'releases' / args.release).resolve(strict=True)
 assert release.parent == root / 'releases'
 manifest = json.loads((release / 'manifest.json').read_text())
 for name, expected in manifest['files'].items():
-    assert name in {'index.html', 'app.css', 'app.js', 'run-page.js', 'results.js', 'task-ui.js'}
+    assert name in {'index.html', 'app.css', 'app.js', 'run-page.js', 'results.js', 'task-ui.js', 'keyframes.js', 'keyframes-core.js'}
     assert hashlib.sha256((release / name).read_bytes()).hexdigest() == expected, name
 entry = root / 'index.html'
 pid = subprocess.check_output(['systemctl', 'show', 'video2rig-web', '-p', 'MainPID'], text=True).strip()

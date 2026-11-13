@@ -19,7 +19,8 @@ LABELS = {"prepare": "准备骨架", "gen": "生成训练数据", "train": "训�
           "exam": "考核识别器", "animate": "生成动画", "stabilize": "稳定化",
           "pipeline": "完整流程", "unknown": "等待阶段依据", "exam_render": "渲染考核片段",
           "exam_grade": "考核评分", "read": "读取关键点", "check": "检查双视角一致性",
-          "solve": "求解动作", "export": "导出动画", "preview": "生成预览", "review": "需要人工检查"}
+          "solve": "求解动作", "export": "导出动画", "preview": "生成预览", "review": "需要人工检查",
+          "keyframes": "生成候选关键帧"}
 UNITS = {"steps": "步", "epochs": "轮", "samples": "个", "frames": "帧"}
 SCAN_TTL = 2.0
 RETENTION_TTL = 3600.0
@@ -243,6 +244,11 @@ def parse_progress(lines, command, args=None):
             phase = _phase("gen", int(match[1]), int(match[2]), "samples", "生成训练数据（单个工作进程）")
             evidence = line
             continue
+        match = re.search(r"\bkeyframes stage (\d+)/(\d+) (\w+)", line)
+        if match and command == "keyframes":
+            label = {"contacts": "判断着地", "candidates": "抽取候选关键帧", "ladder": "计算过渡键阶梯"}.get(match[3], "生成候选关键帧")
+            phase, evidence = _phase("keyframes", int(match[1]), int(match[2]), None, label), line
+            continue
         match = re.search(r"\bmotion frame (\d+)/(\d+)\b", line)
         if match and command == "exam":
             phase, evidence = _phase("exam_render", int(match[1]), int(match[2]), "frames", "渲染考核片段"), line
@@ -273,6 +279,9 @@ def parse_progress(lines, command, args=None):
             key = "stabilize"
         elif "done in" in line:
             evidence = line
+            if command == "keyframes" and "keyframes done" in line:
+                phase = _phase("keyframes", None, None, None, "候选关键帧已生成")
+                continue
         allowed = ({"prepare"} if command == "prepare" else {"gen"} if command == "gen" else
                    {"train"} if command == "train" else {"stabilize", "export", "preview", "review"} if command == "stabilize" else
                    {"exam_render", "exam_grade", "read", "check", "solve", "export", "preview", "review"} if command == "exam" else

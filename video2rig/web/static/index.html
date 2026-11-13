@@ -24,6 +24,7 @@
     <button data-tab="overview" class="active"><span aria-hidden="true">◫</span>项目概览</button>
     <button data-tab="run"><span aria-hidden="true">▷</span>生成动画</button>
     <button data-tab="outputs"><span aria-hidden="true">▤</span>动画结果 <span id="outputCount" class="count">0</span></button>
+<button data-tab="keyframes"><span aria-hidden="true">◆</span>关键帧</button>
     <div class="nav-divider"></div><div class="nav-caption">训练与验证</div>
     <button data-tab="train"><span aria-hidden="true">↗</span>训练情况</button>
     <button data-tab="samples"><span aria-hidden="true">▦</span>训练数据</button>
@@ -38,6 +39,7 @@
   <section id="tab-overview" class="tab active" aria-label="项目概览"><div id="overviewContent"></div></section>
   <section id="tab-run" class="tab" aria-label="生成动画"><div id="generateContent"></div></section>
   <section id="tab-outputs" class="tab" aria-label="动画结果"><div id="outputsContent"></div></section>
+<section id="tab-keyframes" class="tab" aria-label="关键帧"><div id="keyframesContent"></div></section>
   <section id="tab-train" class="tab" aria-label="训练情况">
     <div id="trainConclusion"></div><div id="projectTask" class="project-task"></div>
     <div class="toolbar maintenance"><button data-step="train" class="primary">开始训练</button><button data-step="gen">生成训练数据</button><button data-step="exam">运行验证</button><button data-nav="samples" class="text-button">查看训练数据 →</button></div>

@@ -1,0 +1,19 @@
+[Unit]
+Description=video2rig studio (user-facing animation platform, port 8700)
+After=network.target video2rig-web.service
+Wants=video2rig-web.service
+
+[Service]
+Type=simple
+WorkingDirectory=/data/video2rig/code
+EnvironmentFile=-/data/video2rig/studio/studio.env
+Environment=PYTHONUNBUFFERED=1
+Environment=STUDIO_ENGINE=v2r
+Environment=V2R_API=http://127.0.0.1:8600
+ExecStart=/data/video2rig/.venv/bin/python -m uvicorn studio.app:app --host 0.0.0.0 --port 8700 --workers 1 --timeout-keep-alive 30
+Restart=on-failure
+RestartSec=3
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

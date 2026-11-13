@@ -32,6 +32,7 @@ sys.path.insert(0, CODE)
 from v2r.viz import draw_kps, composite_bg, put_title  # noqa: E402
 from web.project_store import ProjectStore  # noqa: E402
 from web.task_monitor import TaskMonitor, read_process_identity, bounded_log_tail  # noqa: E402
+from web import keyframes_store  # noqa: E402
 
 ROOT = os.environ.get("V2R_ROOT", "/data/video2rig")
 PROJ = os.path.join(ROOT, "projects")
@@ -48,6 +49,8 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 NAME_RE = re.compile(r"^[A-Za-z0-9_\-\.]+$")
 VIDEO_BINDINGS_LOCK = threading.Lock()
+# Serialises keyframes_artist.json read-check-write (base_revision) inside this process.
+KEYFRAMES_LOCK = keyframes_store.LOCK
 PROJECT_STORE = ProjectStore(PROJ)
 TASK_MONITOR = TaskMonitor(PROJ, JOBS_DIR)
 _STORE_ROOT = PROJ
@@ -275,6 +278,8 @@ def outputs(p: str):
             continue
         n = os.path.basename(o)
         files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(o, "*")) if os.path.isfile(f))
+        # Lightweight flag for the "关键帧" entry; existence only, files are not parsed here.
+        has_keyframes = {"auto": keyframes_store.AUTO_FILE in files, "artist": keyframes_store.ARTIST_FILE in files}
         summary = jload(os.path.join(o, "summary.json"))
         if summary and summary.get("status") == "needs_review":
             # Files from an older successful run may remain on disk; don't offer them as current.
@@ -284,6 +289,7 @@ def outputs(p: str):
                     "stability": jload(os.path.join(o, "stability.json")),
                     "check": {k: v for k, v in (jload(os.path.join(o, "check.json"), {}) or {}).items()
                               if not isinstance(v, list)},
+                    "has_keyframes": has_keyframes,
                     "mtime": os.path.getmtime(o)})
     res.sort(key=lambda r: -r["mtime"])
     return res
@@ -298,6 +304,71 @@ def out_curve(p: str, name: str):
     res = {"residual": chk.get("frame_residual_rel"), "bonelen": chk.get("frame_bonelen_err"),
            "bad": chk.get("bad_mask")}
     return res
+
+
+# ----------------------------------------------------------------------------- keyframes
+def result_dir(p, name):
+    d = proj_dir(p)
+    out = os.path.join(d, "out")
+    o = inside(out, os.path.join(out, safe_name(name)))
+    if not os.path.isdir(o):
+        raise HTTPException(404, f"no result {name}")
+    return o
+
+
+KEYFRAME_SCRIPT = os.path.join(CODE, "tools", "max2026", "run_keyframes.py")
+KEYFRAME_REQUIRED = ('Bip001', 'Bip001 Spine1', 'Bip001 Neck', 'Bip001 L Hand', 'Bip001 R Hand',
+                     'Bip001 L Forearm', 'Bip001 R Forearm', 'Bip001 L Foot', 'Bip001 R Foot')
+
+
+def keyframe_generation(p, o):
+    """Can the web generate candidates for this result? {available, reason} (cheap file checks only)."""
+    if not os.path.isfile(KEYFRAME_SCRIPT):
+        return {"available": False, "reason": "服务器上没有关键帧抽取脚本（tools/max2026/run_keyframes.py）"}
+    rig = jload(os.path.join(PROJ, p, "rig.json"), {}) or {}
+    names = {k.get("name") for k in rig.get("keypoints", []) if isinstance(k, dict)}
+    missing = [n for n in KEYFRAME_REQUIRED if n not in names]
+    if missing:
+        return {"available": False, "reason": "这个角色没有 Biped 关节（如 " + "、".join(missing[:2]) + "），目前只支持 Biped 角色"}
+    if not any(os.path.isfile(os.path.join(o, f)) for f in ("motion.npz", "motion_temporal.npz")):
+        return {"available": False, "reason": "这个结果没有 motion.npz（求解动作），可能未完成或检查未通过"}
+    if not os.path.isfile(os.path.join(o, "reading.npz")):
+        return {"available": False, "reason": "这个结果没有 reading.npz（识别读数），无法判断着地，不能生成候选"}
+    return {"available": True, "reason": ""}
+
+
+def keyframe_video(name):
+    """{name, url} for a file in VIDEOS, or None (never raises; the page shows a notice)."""
+    if not name or not NAME_RE.fullmatch(name) or name.startswith("."):
+        return None
+    try:
+        path = inside(VIDEOS, os.path.join(VIDEOS, name))
+    except HTTPException:
+        return None
+    if not os.path.isfile(path):
+        return None
+    return {"name": name, "url": f"/api/videos/{name}/file"}
+
+
+@app.get("/api/projects/{p}/out/{name}/keyframes")
+def out_keyframes(p: str, name: str):
+    """Candidates (read-only) + latest artist annotation + source video for one result."""
+    o = result_dir(p, name)
+    summary = jload(os.path.join(o, "summary.json"))
+    state = keyframes_store.view(o, summary, None)
+    state["video"] = keyframe_video(state["video_name"])
+    state["generation"] = keyframe_generation(p, o)
+    return state
+
+
+@app.put("/api/projects/{p}/out/{name}/keyframes/artist")
+def save_out_keyframes(p: str, name: str, body: dict):
+    """Save one artist revision. Never writes keyframes_auto.json."""
+    o = result_dir(p, name)
+    try:
+        return keyframes_store.save_artist(o, body, jload(os.path.join(o, "summary.json")))
+    except keyframes_store.KeyframeError as e:
+        raise HTTPException(e.status, e.detail)
 
 
 # ----------------------------------------------------------------------------- inputs / uploads
@@ -472,6 +543,8 @@ class Jobs:
             return base + [p]
         if j["cmd"] == "stabilize":
             return base + [p, a["source"], "--name", a["name"], "--cutoff", str(a.get("cutoff", 1.5))]
+        if j["cmd"] == "keyframes":
+            return [PY, KEYFRAME_SCRIPT, p, a["name"]]
         if j["cmd"] == "animate":
             argv = base + [p, a["video"], "--name", a.get("name") or os.path.splitext(os.path.basename(a["video"]))[0]]
             if a.get("swap"):
@@ -534,6 +607,10 @@ class Jobs:
                 text = open(j["log"], errors="replace").read()[-12000:]
                 needs_review = rc != 0 and "[v2r] NEEDS_REVIEW:" in text
                 j["status"] = "done" if rc == 0 else ("needs_review" if needs_review else ("cancelled" if rc < 0 else "failed"))
+                if j["cmd"] == "keyframes" and rc != 0:
+                    reason = [line.split("KEYFRAMES_FAILED:", 1)[1].strip() for line in text.splitlines() if "KEYFRAMES_FAILED:" in line]
+                    if reason:
+                        j["error"] = reason[-1][:300]
                 if needs_review:
                     j["result_name"] = j["args"].get("name") or os.path.splitext(os.path.basename(j["args"]["video"]))[0]
                 self.proc = None
@@ -576,7 +653,7 @@ def capabilities():
 async def new_job(body: dict):
     project = safe_name(body.get("project", ""))
     cmd = body.get("cmd")
-    if cmd not in ("pipeline", "prepare", "gen", "train", "exam", "animate", "stabilize"):
+    if cmd not in ("pipeline", "prepare", "gen", "train", "exam", "animate", "stabilize", "keyframes"):
         raise HTTPException(400, "unknown cmd")
     args = body.get("args", {}) or {}
     if not isinstance(args, dict):
@@ -645,6 +722,16 @@ async def new_job(body: dict):
         if not 0.25 <= cutoff <= 6:
             raise HTTPException(400, "Cutoff must be between 0.25 and 6 Hz")
         args["cutoff"] = cutoff
+    if cmd == "keyframes":
+        # Candidate keyframes for one existing result (CPU, seconds). Only the result name is accepted.
+        name = safe_name(args.get("name", ""))
+        o = result_dir(project, name)
+        gen = keyframe_generation(project, o)
+        if not gen["available"]:
+            raise HTTPException(400, gen["reason"])
+        if os.path.isfile(os.path.join(o, keyframes_store.AUTO_FILE)) and args.get("replace") is not True:
+            raise HTTPException(409, "这个结果已有候选关键帧。重新生成会替换候选（旧文件会保留为历史版本），请确认后再提交。")
+        args = {"name": name, "replace": args.get("replace") is True}
     return JOBS.add(project, cmd, args)
 
 

@@ -1,0 +1,127 @@
+"""End-to-end API test for the user studio against a running fake-engine server.
+
+python video2rig/tools/test_studio.py http://127.0.0.1:8711 <video.mp4>
+Requires STUDIO_ENGINE=fake (see work/studio-dev/setup_local.py) and the admin admin/admin123.
+"""
+import json
+import sys
+import time
+import uuid
+
+import httpx
+
+BASE = sys.argv[1] if len(sys.argv) > 1 else 'http://127.0.0.1:8711'
+VIDEO = sys.argv[2] if len(sys.argv) > 2 else 'ladingwu.mp4'
+H = {'X-Studio': '1'}
+ok = 0
+
+
+def check(cond, msg):
+    global ok
+    if not cond:
+        raise SystemExit(f'FAIL: {msg}')
+    ok += 1
+    print('  ok', msg)
+
+
+def client():
+    return httpx.Client(base_url=BASE, headers=H, timeout=60)
+
+
+def wait(c, url, pred, limit=90):
+    t = time.time()
+    while time.time() - t < limit:
+        r = c.get(url).json()
+        if pred(r):
+            return r
+        time.sleep(1)
+    raise SystemExit(f'FAIL: timeout waiting on {url}: {r}')
+
+
+anon = client()
+check(anon.get('/api/characters').status_code == 401, 'anonymous blocked')
+check(httpx.post(BASE + '/api/auth/login', json={}).status_code == 403, 'csrf header required')
+name = 'u' + uuid.uuid4().hex[:6]
+u = client()
+r = u.post('/api/auth/register', json={'username': name, 'password': 'secret1'})
+check(r.status_code == 200 and r.json()['user']['role'] == 'user', 'register user')
+check(u.post('/api/auth/register', json={'username': name, 'password': 'secret1'}).status_code == 409, 'duplicate name')
+check(u.post('/api/auth/login', json={'username': name, 'password': 'bad'}).status_code == 400, 'bad password')
+chars = u.get('/api/characters').json()
+check(len(chars) >= 1 and all(c['status'] == 'ready' for c in chars), f'library lists {len(chars)} ready characters')
+char = next(c for c in chars if '11101' in c['name'])
+d = u.get(f'/api/characters/{char["id"]}').json()
+check(d['preview'] and d['preview']['kind'] == 'fbx', 'fbx preview available')
+check(u.get(d['preview']['url']).status_code == 200, 'fbx asset served')
+check(u.get(f'/api/characters/{char["id"]}/asset/..%2F..%2Fsecret.fbx').status_code in (403, 404), 'asset traversal blocked')
+ref = u.get(f'/api/characters/{char["id"]}/reference?download=1')
+check(ref.status_code == 200 and 'attachment' in ref.headers.get('content-disposition', ''), 'reference download')
+
+with open(VIDEO, 'rb') as f:
+    r = u.post(f'/api/characters/{char["id"]}/videos', files={'file': ('我的动作.mp4', f, 'video/mp4')})
+check(r.status_code == 200, f'video upload {r.text[:200]}')
+vid = r.json()['id']
+check(u.post(f'/api/characters/{char["id"]}/videos', files={'file': ('x.txt', b'abc', 'text/plain')}).status_code == 400, 'non-video rejected')
+other = client()
+other.post('/api/auth/register', json={'username': 'o' + uuid.uuid4().hex[:6], 'password': 'secret1'})
+check(other.get(f'/api/videos/{vid}/file').status_code == 404, "other user cannot read video")
+
+w = u.post('/api/works', json={'character_id': char['id'], 'video_id': vid, 'title': '挥拳'}).json()
+check(w['status'] == 'waiting', 'work created')
+check(other.get(f'/api/works/{w["id"]}').status_code == 404, 'other user cannot see work')
+w = wait(u, f'/api/works/{w["id"]}', lambda x: x['status'] not in ('waiting', 'queued', 'running'))
+check(w['status'] == 'ready' and w['files'].get('fbx') and w['files'].get('compare'), f'work ready {w["status"]}')
+check(u.get(f'/api/works/{w["id"]}/media/model.glb').status_code == 200, 'glb preview')
+dl = u.get(f'/api/works/{w["id"]}/download/fbx')
+check(dl.status_code == 200 and '.fbx' in dl.headers.get('content-disposition', ''), 'full fbx download')
+w = wait(u, f'/api/works/{w["id"]}', lambda x: x['kf_status'] in ('done', 'failed'))
+check(w['kf_status'] == 'done', 'auto keyframes after generation')
+kv = u.get(f'/api/works/{w["id"]}/keyframes').json()
+check(kv['auto'] and len(kv['auto']['keyframes']) > 3 and kv['revision'] == 0, 'keyframe view')
+keys = [{'id': k['id'], 'frame': k['frame'], 'type': k['type'], 'note': '', 'origin': 'auto', 'auto_id': k['id'], 'auto_frame': k['frame']}
+        for k in kv['auto']['keyframes'][:4]]
+keys.append({'id': 'a001', 'frame': 100 if all(k['frame'] != 100 for k in keys) else 101, 'type': 'custom', 'note': '手动', 'origin': 'artist', 'auto_id': None, 'auto_frame': None})
+removed = [k['id'] for k in kv['auto']['keyframes'][4:]]
+r = u.put(f'/api/works/{w["id"]}/keyframes', json={'base_revision': 0, 'keyframes': keys, 'removed_auto_ids': removed})
+check(r.status_code == 200 and r.json()['revision'] == 1 and r.json()['artist']['author'] == name, 'save keyframes r1')
+r = u.put(f'/api/works/{w["id"]}/keyframes', json={'base_revision': 0, 'keyframes': keys, 'removed_auto_ids': removed})
+check(r.status_code == 409, 'stale save 409')
+e = u.post(f'/api/works/{w["id"]}/exports', json={'format': 'fbx', 'interp': 'smooth'}).json()
+check(e['options']['frames'] == sorted(k['frame'] for k in keys), 'export uses saved keyframes')
+e = wait(u, f'/api/works/{w["id"]}/exports', lambda x: x[0]['status'] in ('done', 'failed'))[0]
+check(e['status'] == 'done' and u.get(e['url']).status_code == 200, 'keyframe export download')
+check(other.get(e['url']).status_code == 404, 'other user cannot download export')
+
+# needs_review path + forced retry
+with open(VIDEO, 'rb') as f:
+    vid2 = u.post(f'/api/characters/{char["id"]}/videos', files={'file': ('bad_clip.mp4', f, 'video/mp4')}).json()['id']
+w2 = u.post('/api/works', json={'character_id': char['id'], 'video_id': vid2}).json()
+w2 = wait(u, f'/api/works/{w2["id"]}', lambda x: x['status'] not in ('waiting', 'queued', 'running'))
+check(w2['status'] == 'needs_review' and w2['message'], 'bad video -> needs_review with message')
+w2 = u.post(f'/api/works/{w2["id"]}/retry', json={'force': True}).json()
+w2 = wait(u, f'/api/works/{w2["id"]}', lambda x: x['status'] not in ('waiting', 'queued', 'running'))
+check(w2['status'] == 'ready' and w2['forced'], 'forced preview ready')
+check(u.delete(f'/api/works/{w2["id"]}').status_code == 200 and u.get(f'/api/works/{w2["id"]}').status_code == 404, 'delete work')
+
+# character upload -> review -> admin approve -> prepared
+fbx = open(VIDEO, 'rb').read()[:2048]
+r = u.post('/api/characters', data={'name': '我的怪兽'}, files=[('files', ('monster.fbx', fbx, 'application/octet-stream')), ('files', ('tex.png', b'png', 'image/png'))])
+check(r.status_code == 200 and r.json()['status'] == 'uploaded', 'character uploaded')
+cid = r.json()['id']
+check(u.post('/api/characters', data={'name': 'x'}, files=[('files', ('a.exe', b'x', 'application/octet-stream'))]).status_code == 400, 'bad model rejected')
+check(other.get(f'/api/characters/{cid}').status_code == 404, 'unpublished character private')
+r = u.post(f'/api/characters/{cid}/prepare').json()
+check(r['status'] == 'pending_review', 'prepare needs review')
+check(u.get('/api/admin/overview').status_code == 403, 'admin api blocked for users')
+adm = client()
+check(adm.post('/api/auth/login', json={'username': 'admin', 'password': 'admin123'}).status_code == 200, 'admin login')
+check(adm.patch(f'/api/admin/characters/{cid}', json={'approve': True}).status_code == 200, 'admin approve')
+c = wait(u, f'/api/characters/{cid}', lambda x: x['status'] in ('ready', 'failed'), limit=60)
+check(c['status'] == 'ready', 'uploaded character prepared')
+check(c['preview'] and c['preview']['kind'] == 'fbx', 'uploaded character previewable')
+check(adm.patch(f'/api/admin/characters/{cid}', json={'published': True}).status_code == 200, 'publish')
+check(any(x['id'] == cid for x in other.get('/api/characters').json()), 'published visible to others')
+ov = adm.get('/api/admin/overview').json()
+check(any(x['username'] == name for x in ov['users']), 'admin overview')
+check(u.post('/api/auth/logout').status_code == 200 and u.get('/api/works').status_code == 401, 'logout')
+print(f'ALL {ok} CHECKS PASSED')

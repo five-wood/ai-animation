@@ -16,6 +16,13 @@ made-up known motion, same studio     ── v2r exam ────▶ exam/exam_
 Seedance two-view video               ── v2r animate ─▶ out/<clip>/<clip>.fbx .glb .bvh .blend, lab.mp4, check.json
 ```
 
+## User-facing studio (动作工坊)
+
+**http://10.0.3.117:8700** (systemd service `video2rig-studio`, code in `studio/`, docs in [studio/README.md](studio/README.md)).
+Accounts, character library with FBX preview/upload, motion workbench (reference download, video upload,
+one-click generation, fit preview, auto/manual keyframes, FBX/GLB/BVH export). It submits jobs to the
+dashboard below (shared GPU queue) and hides technical details. Deploy with `tools/deploy_studio.ps1`.
+
 ## Web dashboard
 
 **http://10.0.3.117:8600** (systemd service `video2rig-web`, code in `web/`, starts automatically with the server)
@@ -25,6 +32,7 @@ Seedance two-view video               ── v2r animate ─▶ out/<clip>/<clip
 | 项目概览 | Current character, readiness, next action, preparation stages, recent results, downloadable two-view reference; rig details are collapsed. |
 | 生成动画 | Current project is the sole target. Upload/select a video, compare reference and preview, explicitly acknowledge unbound or cross-project inputs; advanced/diagnostic options are collapsed and never silently remembered. |
 | 动画结果 | Search/filter results, bounded equal-height video/3D comparison, unified exact-second timeline, frame stepping/speed, FBX-first grouped exports, anomaly jumps, collapsed technical diagnostics and stable-copy form. Duration mismatches are explicitly labeled; no time normalization. |
+| 关键帧 | Candidate keyframes of one result (`keyframes_auto.json`, read-only) over the source video: frame stepping, typed/colour-coded timeline with evidence curves, per-key video thumbnails, breakdown-ladder slider, artist add/delete/retype/move/notes, save with revision history and 409 conflict handling, JSON export. Also reachable from a result via “关键帧标注 →”. Contract: `docs/关键帧数据与网页接口约定_20261111.md`. |
 | 训练情况 | Conclusion, current-project task, training curves, guarded single-step operations, collapsed technical logs. |
 | 训练数据 | Paged native-button thumbnails, blur filter, labels/augmentation, ←/→ stepping within the current page. |
 | 验证报告 | Conclusion and next action, key metrics, bounded recording, per-bone error detail; automatic pass is not animation-quality acceptance. |
@@ -38,7 +46,11 @@ node tools/test_run_page.cjs
 node video2rig/tools/test_results.cjs
 node video2rig/tools/test_workspace_routes.cjs
 node video2rig/tools/test_task_ui.cjs
+node video2rig/tools/test_keyframes.cjs
+python video2rig/tools/test_web_keyframes.py     # stdlib + temporary dirs; stubs cv2/fastapi if absent
 ```
+
+Keyframe page local preview (no server, no GPU): `node work/web-keyframes/preview_server.cjs 18600` serves `web/static` with mocked project APIs and the real `web/keyframes_store.py` (via `kf_bridge.py`) on copies under `work/web-keyframes/fixture/`; `node work/web-keyframes/browser_check.cjs` drives headless Chrome over CDP (load, keyboard, edit, save r1, simulated concurrent r2 → 409 → overwrite r3, no-candidate result, overflow and page-error checks) and writes screenshots next to it.
 
 ### Batch 2: observed tasks, real progress, safe recovery
 

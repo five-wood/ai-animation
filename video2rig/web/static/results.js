@@ -18,7 +18,7 @@ function checkLabel(o) {
 }
 
 // The module owns only the contents of #outputsContent. No global player or scene is shared.
-export function initResults({ api, submit, current, notify, chart }) {
+export function initResults({ api, submit, current, notify, chart, openKeyframes }) {
   const host = document.querySelector("#tab-outputs #outputsContent");
   if (!host) throw new Error("Results needs #outputsContent inside #tab-outputs");
   const tab = document.getElementById("tab-outputs");
@@ -36,7 +36,7 @@ export function initResults({ api, submit, current, notify, chart }) {
         <div id="outEmpty" class="panel empty-state" role="status">选择项目后查看动画结果。</div>
         <article id="outDetail" hidden>
           <section class="panel" aria-labelledby="outTitle">
-            <div class="toolbar result-title"><h2 id="outTitle"></h2><span id="outBadge" class="badge"></span><a id="outMainExport" class="primary" download hidden>下载 FBX</a></div>
+            <div class="toolbar result-title"><h2 id="outTitle"></h2><span id="outBadge" class="badge"></span><a id="outMainExport" class="primary" download hidden>下载 FBX</a><button id="outKeyframes" type="button" hidden>关键帧标注 →</button></div>
             <p id="outConclusion" class="run-notice"></p>
             <div id="outFiles" class="export-menu"></div>
             <div class="toolbar"><div id="outModes" class="segmented" role="group" aria-label="预览模式"><button type="button" data-out-mode="video" aria-pressed="true">视频</button><button type="button" data-out-mode="3d" aria-pressed="false">3D</button><button type="button" data-out-mode="compare" aria-pressed="false">对照</button></div><span id="outPreviewHint" class="hint"></span></div>
@@ -698,6 +698,11 @@ export function initResults({ api, submit, current, notify, chart }) {
     el.outConclusion.dataset.kind = failed ? "warning" : "info";
     renderExports(o);
     renderSummary(o);
+    if (el.outKeyframes) {
+      const kf = o.has_keyframes || {};
+      el.outKeyframes.hidden = !openKeyframes;
+      el.outKeyframes.textContent = kf.artist ? "关键帧标注（已有标注）→" : kf.auto ? "关键帧候选与标注 →" : "关键帧标注 →";
+    }
     const files = safeFiles(o.files);
     videoFile = files.includes("lab.mp4") ? "lab.mp4" : files.includes("diagnostic.mp4") ? "diagnostic.mp4" : files.find((f) => /\.mp4$/i.test(f)) || null;
     glbFile = files.find((f) => f.toLowerCase() === `${o.name}.glb`.toLowerCase()) || files.find((f) => /\.glb$/i.test(f)) || null;
@@ -799,6 +804,7 @@ export function initResults({ api, submit, current, notify, chart }) {
   }
 
   el.outRefresh.addEventListener("click", refresh);
+  el.outKeyframes?.addEventListener("click", () => { if (selected && openKeyframes) { pause(); openKeyframes(selected); } });
   el.outSearch.addEventListener("input", renderList);
   el.outFilter.addEventListener("change", renderList);
   el.outDiagnostics.addEventListener("toggle", () => { if (el.outDiagnostics.open) drawCurve(); });
