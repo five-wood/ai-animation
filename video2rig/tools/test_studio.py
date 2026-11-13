@@ -136,6 +136,60 @@ check(plog and '"--up=+Y"' in plog[-1] and '"--facing=-Y"' in plog[-1], f'pipeli
 check(c['preview'] and c['preview'].get('inspected') and u.get(c['preview']['url']).status_code == 200, 'uploaded character previewable (inspected glb)')
 check(not c['orient_editable'] and c['orient']['up'] == '+Y', 'orientation kept and locked once ready')
 check(adm.patch(f'/api/admin/characters/{cid}', json={'published': True}).status_code == 200, 'publish')
+
+# ---- re-make an already-trained character (the dashboard answers 409 for a pipeline into a trained project)
+proj_v1 = pc['project']
+check(u.post(f'/api/characters/{cid}/prepare').status_code == 403, 'owner cannot re-make without admin (approval mode)')
+check(adm.patch(f'/api/admin/characters/{cid}', json={'remake': True}).status_code == 200, 'admin re-make accepted')
+mid = adm.get(f'/api/characters/{cid}').json()
+check(mid['status'] == 'ready' and 'remake' in mid, 'still usable while re-making')
+check(adm.patch(f'/api/admin/characters/{cid}', json={'remake': True}).status_code == 400, 'second re-make refused while running')
+
+
+def remake_done(_):
+    row = next(x for x in adm.get('/api/admin/overview').json()['characters'] if x['id'] == cid)
+    return not row['pending_project'] and row['project'] != proj_v1 and row
+
+
+row = wait(adm, '/api/admin/overview', lambda _: remake_done(_), limit=90)
+row = remake_done(None)
+check(row['project'] != proj_v1 and proj_v1 in row['prev_projects'], f'switched to new project, old kept: {proj_v1} -> {row["project"]}')
+check(os.path.isfile(os.path.join(os.environ['V2R_ROOT'], 'projects', proj_v1, 'model', 'best.pt')), 'old trained project untouched on disk')
+check(adm.get(f'/api/characters/{cid}').json()['status'] == 'ready', 'ready after re-make')
+# system character (no uploaded model): re-make must be refused with a clear message, never sent to 8600
+sys_c = next(x for x in adm.get('/api/admin/overview').json()['characters'] if x['owner'] == '系统')
+r = adm.patch(f'/api/admin/characters/{sys_c["id"]}', json={'remake': True})
+check(r.status_code == 400 and '内部看板' in r.json()['detail'], 'system character re-make refused')
+
+# ---- retry a failed first-time make whose project already has a rig (prepare ran, training crashed)
+with open(VIDEO, 'rb') as f:
+    head = f.read(2048)
+r = adm.post('/api/characters', data={'name': '重试测试'}, files=[('files', ('noarm_model.fbx', head, 'application/octet-stream'))])
+fid = r.json()['id']
+wait(adm, f'/api/characters/{fid}', lambda x: x['inspect']['status'] in ('done', 'failed'))
+import sqlite3  # noqa: E402  (test-only: mark the uploaded model so the fake pipeline fails once)
+fdir = sqlite3.connect(os.path.join(os.environ['V2R_ROOT'], 'studio', 'studio.db')).execute(
+    'SELECT files_dir FROM characters WHERE id = ?', (fid,)).fetchone()[0]
+open(os.path.join(fdir, 'FAKE_FAIL'), 'w').close()
+check(adm.post(f'/api/characters/{fid}/prepare').status_code == 200, 'admin starts first make')
+wait(adm, f'/api/characters/{fid}', lambda x: x['status'] in ('ready', 'failed'), limit=60)
+frow = next(x for x in adm.get('/api/admin/overview').json()['characters'] if x['id'] == fid)
+check(frow['status'] == 'failed', 'first make fails (fake: no armature)')
+fproj = frow['project']
+os.makedirs(os.path.join(os.environ['V2R_ROOT'], 'projects', fproj), exist_ok=True)
+open(os.path.join(os.environ['V2R_ROOT'], 'projects', fproj, 'rig.json'), 'w').write('{}')   # what a real crash leaves behind
+os.remove(os.path.join(fdir, 'FAKE_FAIL'))
+check(adm.patch(f'/api/admin/characters/{fid}', json={'approve': True}).status_code == 200, 'retry accepted')
+wait(adm, f'/api/characters/{fid}', lambda x: x['status'] in ('ready', 'failed'), limit=60)
+frow = next(x for x in adm.get('/api/admin/overview').json()['characters'] if x['id'] == fid)
+check(frow['project'] != fproj and 'already contains' not in frow['error_raw'],
+      f'retry used a fresh project instead of a 409 ({fproj} -> {frow["project"]}): {frow["error_raw"][:80]}')
+
+# ---- keyframes: auto-mark again on a result that already has candidates (dashboard 409 without replace)
+w1 = next(x for x in u.get('/api/works').json() if x['status'] == 'ready')
+check(u.post(f'/api/works/{w1["id"]}/keyframes/auto').status_code == 200, 're-run auto keyframes')
+w1 = wait(u, f'/api/works/{w1["id"]}', lambda x: x['kf_status'] in ('done', 'failed'))
+check(w1['kf_status'] == 'done', 'auto keyframes again succeeds (replace)')
 check(any(x['id'] == cid for x in other.get('/api/characters').json()), 'published visible to others')
 ov = adm.get('/api/admin/overview').json()
 check(any(x['username'] == name for x in ov['users']), 'admin overview')

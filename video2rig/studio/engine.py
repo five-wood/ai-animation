@@ -22,11 +22,31 @@ from . import config
 
 
 class Busy(Exception):
-    pass
+    """Try again later (project busy, queue full, dashboard unreachable)."""
 
 
 class Rejected(Exception):
-    pass
+    """The dashboard refused the job. kind: 'project_exists' (pipeline into a project that already has a
+    rig / trained reader), 'has_candidates' (keyframes without replace), or 'other'."""
+
+    def __init__(self, message, code=None, kind='other'):
+        super().__init__(message)
+        self.code = code
+        self.kind = kind
+
+
+def classify_409(detail):
+    """8600 answers 409 for three different reasons; only the first one means 'retry later'."""
+    d = detail or ''
+    if '已有运行或排队任务' in d or '已有排队或运行中的任务' in d:
+        return 'busy'
+    if 'already contains a rig' in d or 'trained reader' in d:
+        return 'project_exists'
+    if '已有候选关键帧' in d:
+        return 'has_candidates'
+    if '任务' in d:          # any other "task running" wording
+        return 'busy'
+    return 'other'
 
 
 def tail_text(path, limit=16000):
@@ -56,9 +76,13 @@ class V2REngine:
                 detail = json.loads(e.read().decode('utf-8')).get('detail')
             except Exception:  # noqa: BLE001
                 detail = str(e)
-            if e.code == 409 and isinstance(detail, str) and '任务' in detail:
-                raise Busy(detail)
-            raise Rejected(detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False))
+            text = detail if isinstance(detail, str) else json.dumps(detail, ensure_ascii=False)
+            if e.code == 409:
+                kind = classify_409(text)
+                if kind == 'busy':
+                    raise Busy(text)
+                raise Rejected(text, 409, kind)
+            raise Rejected(text, e.code)
         except (urllib.error.URLError, OSError) as e:
             raise Busy(f'动画服务暂时无法连接：{e}')
 
@@ -98,6 +122,16 @@ class FakeEngine:
         with self.lock:
             if any(j['project'] == project and j['status'] in ('queued', 'running') for j in self.jobs.values()):
                 raise Busy('当前项目已有运行或排队任务')
+            # Same guards as web/server.py new_job (they answer 409).
+            proj = os.path.join(config.PROJ, project)
+            if cmd == 'pipeline' and (os.path.exists(os.path.join(proj, 'rig.json'))
+                                      or os.path.exists(os.path.join(proj, 'model', 'best.pt'))):
+                raise Rejected('Project already contains a rig, trained reader, or training metadata; '
+                               'choose a new project name to avoid reusing an old model', 409, 'project_exists')
+            if cmd == 'keyframes' and not args.get('replace') and os.path.isfile(
+                    os.path.join(proj, 'out', args.get('name', ''), 'keyframes_auto.json')):
+                raise Rejected('这个结果已有候选关键帧。重新生成会替换候选（旧文件会保留为历史版本），请确认后再提交。',
+                               409, 'has_candidates')
             jid = time.strftime('%Y%m%d-%H%M%S') + f'-{cmd}-{project}-' + uuid.uuid4().hex[:8]
             j = {'id': jid, 'project': project, 'cmd': cmd, 'args': args, 'status': 'queued', 'rc': None,
                  'error': '', 'log': os.path.join(self.dir, jid + '.log'), 'cancel': False}
@@ -193,7 +227,8 @@ class FakeEngine:
         self._say(j, f"[v2r] pipeline args {json.dumps(j['args'].get('extra', []))}", 0)
         proj = os.path.join(config.PROJ, j['project'])
         os.makedirs(os.path.join(proj, 'model'), exist_ok=True)
-        if 'noarm' in os.path.basename(j['args']['model']).lower():
+        model_dir = os.path.dirname(j['args']['model'])
+        if 'noarm' in os.path.basename(j['args']['model']).lower() or os.path.exists(os.path.join(model_dir, 'FAKE_FAIL')):
             self._say(j, 'NO_ARMATURE: the model has no skeleton', 0.5)
             raise RuntimeError('blender prepare.py failed')
         for step in ('prepare', 'gen', 'train', 'exam'):

@@ -102,7 +102,8 @@ class DB:
             c.executescript(SCHEMA)
             # Additive migrations (old databases keep working).
             cols = {r[1] for r in c.execute('PRAGMA table_info(characters)')}
-            for name, decl in (('orient', 'TEXT'), ('inspect_status', "TEXT NOT NULL DEFAULT 'none'"), ('inspect', 'TEXT')):
+            for name, decl in (('orient', 'TEXT'), ('inspect_status', "TEXT NOT NULL DEFAULT 'none'"), ('inspect', 'TEXT'),
+                               ('prev_projects', 'TEXT'), ('pending_project', 'TEXT'), ('remake_error', 'TEXT')):
                 if name not in cols:
                     c.execute(f'ALTER TABLE characters ADD COLUMN {name} {decl}')
 

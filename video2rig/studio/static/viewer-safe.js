@@ -1,11 +1,11 @@
 // 3D preview that never takes the page down: three.js and its loaders are imported on demand.
 // If they cannot be loaded (network, proxy, old browser), only the preview area shows a notice;
 // login, library, upload, generation, keyframes and export keep working.
-import { h, ICON } from "./util.js?v=8";
+import { h, ICON } from "./util.js?v=9";
 
 let modPromise = null;
 function loadModule() {
-  if (!modPromise) modPromise = import("./viewer.js?v=8").catch((e) => { modPromise = null; throw e; });
+  if (!modPromise) modPromise = import("./viewer.js?v=9").catch((e) => { modPromise = null; throw e; });
   return modPromise;
 }
 

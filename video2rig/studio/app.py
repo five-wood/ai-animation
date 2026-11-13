@@ -7,6 +7,7 @@ Accounts (SQLite), a character library (existing trained projects + user uploads
 Heavy work is submitted to the internal dashboard's single GPU queue (studio/engine.py); this
 service never trains or solves by itself. Keyframe-only exports run Blender here (CPU).
 """
+import glob
 import json
 import os
 import re
@@ -351,6 +352,10 @@ def char_view(c, u, detail=False):
              os.path.join(project_dir(c['project']), 'reference_two_views.png'))}
     if c['status'] in ('preparing', 'failed', 'pending_review'):
         v['progress'] = prepare_progress(c)
+    if c['pending_project']:   # still usable; a new version is being trained in the background
+        v['remake'] = prepare_progress(c, c['pending_project'])
+    elif c['remake_error'] and (c['owner_id'] == u['id'] or u['role'] == 'admin'):
+        v['remake_failed'] = True
     if detail:
         v['preview'] = char_preview(c)
         v['works'] = db.one('SELECT COUNT(*) AS n FROM works WHERE character_id = ? AND user_id = ? AND deleted = 0',
@@ -499,6 +504,14 @@ def request_prepare(cid: int, u=Depends(current_user)):
     c = get_char(cid, u)
     if c['owner_id'] != u['id'] and u['role'] != 'admin':
         raise HTTPException(403, '只能制作自己上传的角色')
+    if c['status'] == 'ready' and c['files_dir']:
+        # Re-make of an uploaded character that already works.
+        if c['pending_project']:
+            raise HTTPException(400, '这个角色正在重新制作，请等它完成')
+        if u['role'] != 'admin' and os.environ.get('STUDIO_PREPARE_APPROVAL', '1') == '1':
+            raise HTTPException(403, '重新制作需要管理员操作，请联系管理员')
+        start_remake(c)
+        return char_view(db.one('SELECT * FROM characters WHERE id = ?', cid), u, detail=True)
     if c['status'] not in ('uploaded', 'failed'):
         raise HTTPException(400, '这个角色已经在制作或已经可用')
     if c['inspect_status'] == 'failed':
@@ -515,9 +528,38 @@ def request_prepare(cid: int, u=Depends(current_user)):
     return char_view(db.one('SELECT * FROM characters WHERE id = ?', cid), u, detail=True)
 
 
+def new_project_name(cid):
+    for _ in range(20):
+        p = f'st{cid}_{uuid.uuid4().hex[:6]}'
+        if not os.path.exists(os.path.join(config.PROJ, p)):
+            return p
+    raise HTTPException(500, '无法分配项目名')
+
+
 def start_prepare(c):
-    project = c['project'] or f'st{c["id"]}_{uuid.uuid4().hex[:6]}'
+    """(Re)start making a character. The dashboard refuses a pipeline into a project that already holds a rig or a
+    trained reader (409), and run_all.sh would skip prepare there anyway - so a re-make always gets a fresh project.
+    The old project is kept untouched (other users' works and exports still point at it)."""
+    project = c['project']
+    if not project or project_has_training(project):
+        old = jparse(c['prev_projects'], []) or []
+        if project:
+            old.append(project)
+        project = new_project_name(c['id'])
+        db.update('characters', c['id'], prev_projects=jdump(old))
     db.update('characters', c['id'], status='preparing', project=project, remote_job=None, error=None)
+
+
+def start_remake(c):
+    """Re-make a character that is already usable: train into a NEW project in the background; the character keeps
+    working on its current project until the new one is ready, then switches (old project kept on disk)."""
+    db.update('characters', c['id'], pending_project=new_project_name(c['id']), remote_job=None, remake_error=None)
+
+
+def project_has_training(project):
+    d = project_dir(project)
+    return bool(d) and (os.path.exists(os.path.join(d, 'rig.json')) or os.path.exists(os.path.join(d, 'model', 'best.pt'))
+                        or bool(glob.glob(os.path.join(d, 'train_data', 'meta_*.json'))))
 
 
 @app.patch('/api/characters/{cid}')
@@ -545,18 +587,19 @@ def delete_character(cid: int, u=Depends(current_user)):
     return {'ok': True}
 
 
-def prepare_progress(c):
+def prepare_progress(c, project=None):
     """{percent, text} for a character being prepared (from project files, no technical detail)."""
-    if c['status'] == 'pending_review':
-        return {'percent': 0, 'text': '已提交，等待管理员审核'}
-    if c['status'] == 'failed':
-        return {'percent': 0, 'text': '制作失败'}
+    if project is None:
+        if c['status'] == 'pending_review':
+            return {'percent': 0, 'text': '已提交，等待管理员审核'}
+        if c['status'] == 'failed':
+            return {'percent': 0, 'text': '制作失败'}
     if not c['remote_job']:
         return {'percent': 1, 'text': '排队中'}
     st = engine().status(c['remote_job'])
     if st['status'] == 'queued':
         return {'percent': 2, 'text': '排队中'}
-    d = project_dir(c['project'])
+    d = project_dir(project or c['project'])
     if not d or not os.path.isfile(os.path.join(d, 'rig.json')):
         return {'percent': 5, 'text': '分析骨骼'}
     if os.path.isfile(os.path.join(d, 'model', 'best.pt')) and os.path.isfile(os.path.join(d, 'exam.log')):
@@ -980,7 +1023,11 @@ def admin_overview(u=Depends(admin_user)):
     for c in db.all('SELECT * FROM characters ORDER BY id DESC'):
         owner = db.one('SELECT username FROM users WHERE id = ?', c['owner_id']) if c['owner_id'] else None
         v = char_view(c, u)
-        v.update(project=c['project'], owner=owner['username'] if owner else '系统', error_raw=(c['error'] or '')[-400:])
+        v.update(project=c['project'], owner=owner['username'] if owner else '系统',
+                 error_raw=((c['remake_error'] or '') + '\n' + (c['error'] or '')).strip()[-600:],
+                 pending_project=c['pending_project'], prev_projects=jparse(c['prev_projects'], []) or [],
+                 can_remake=bool(c['files_dir'] and c['model_path'] and os.path.isfile(c['model_path'])) and c['status'] == 'ready'
+                 and not c['pending_project'])
         chars.append(v)
     works = []
     for w in db.all('SELECT * FROM works WHERE deleted = 0 ORDER BY created DESC LIMIT 100'):
@@ -1043,6 +1090,14 @@ def admin_character_update(cid: int, body: dict, u=Depends(admin_user)):
         if c['status'] not in ('pending_review', 'failed', 'uploaded'):
             raise HTTPException(400, '这个角色不需要审核')
         start_prepare(c)
+    if body.get('remake'):
+        if not c['files_dir'] or not c['model_path'] or not os.path.isfile(c['model_path']):
+            raise HTTPException(400, '这是训练服务器上的项目，请在内部看板里重新制作')
+        if c['status'] != 'ready':
+            raise HTTPException(400, '只有可用的角色才能重新制作')
+        if c['pending_project']:
+            raise HTTPException(400, '这个角色正在重新制作')
+        start_remake(c)
     if body.get('reject'):
         if c['status'] != 'pending_review':
             raise HTTPException(400, '这个角色不在审核中')
@@ -1088,12 +1143,20 @@ def tick_characters():
                 o = jparse(c['orient'], None) or {}
                 # --up rotates the model upright, --facing tells which way it then looks (studio/orient.py).
                 extra = [f'--up={o.get("up", "+Z")}', f'--facing={o.get("facing", "-Y")}']
+                if not c['model_path'] or not os.path.isfile(c['model_path']):
+                    restore_after_failed_remake(c, 'model file missing')
+                    continue
                 jid = engine().submit(c['project'], 'pipeline', {'model': c['model_path'], 'extra': extra})
                 db.update('characters', c['id'], remote_job=jid)
             except Busy:
                 pass
             except Rejected as e:
-                db.update('characters', c['id'], status='failed', error=str(e))
+                if e.kind == 'project_exists':
+                    # The target project already has training (e.g. a crashed earlier run): use a fresh one.
+                    start_prepare(db.one('SELECT * FROM characters WHERE id = ?', c['id']))
+                    print(f'[studio] character {c["id"]}: project {c["project"]} already trained, moved to a new project', flush=True)
+                else:
+                    restore_after_failed_remake(c, str(e))
             continue
         st = engine().status(c['remote_job'])
         if st['status'] in ('queued', 'running'):
@@ -1101,7 +1164,52 @@ def tick_characters():
         if st['status'] == 'done' and project_ready(c['project']):
             db.update('characters', c['id'], status='ready', error=None)
         else:
-            db.update('characters', c['id'], status='failed', error=(st['error'] or '') + '\n' + st['log'][-3000:])
+            restore_after_failed_remake(c, (st['error'] or '') + '\n' + st['log'][-3000:])
+
+
+def tick_remakes():
+    """Background re-make of a usable character into pending_project; switch over only when it is trained."""
+    for c in db.all("SELECT * FROM characters WHERE pending_project IS NOT NULL"):
+        p = c['pending_project']
+        if not c['remote_job']:
+            if project_has_training(p):          # name collision with an existing trained project: pick another
+                db.update('characters', c['id'], pending_project=new_project_name(c['id']))
+                continue
+            o = jparse(c['orient'], None) or {}
+            extra = [f'--up={o.get("up", "+Z")}', f'--facing={o.get("facing", "-Y")}']
+            try:
+                jid = engine().submit(p, 'pipeline', {'model': c['model_path'], 'extra': extra})
+                db.update('characters', c['id'], remote_job=jid)
+            except Busy:
+                pass
+            except Rejected as e:
+                if e.kind == 'project_exists':
+                    db.update('characters', c['id'], pending_project=new_project_name(c['id']))
+                else:
+                    db.update('characters', c['id'], pending_project=None, remote_job=None, remake_error=str(e)[-3000:])
+            continue
+        st = engine().status(c['remote_job'])
+        if st['status'] in ('queued', 'running'):
+            continue
+        if st['status'] == 'done' and project_ready(p):
+            old = (jparse(c['prev_projects'], []) or []) + ([c['project']] if c['project'] else [])
+            db.update('characters', c['id'], project=p, pending_project=None, remote_job=None, remake_error=None,
+                      prev_projects=jdump(old), error=None)
+            print(f'[studio] character {c["id"]} re-made: {c["project"]} -> {p}', flush=True)
+        else:
+            db.update('characters', c['id'], pending_project=None, remote_job=None,
+                      remake_error=((st['error'] or '') + '\n' + st['log'][-3000:])[-3000:])
+
+
+def restore_after_failed_remake(c, error):
+    """A failed re-make must not take a working character away from users: fall back to the last trained project
+    (status ready, error kept for the admin). A first-time make simply fails."""
+    old = [p for p in (jparse(c['prev_projects'], []) or []) if project_ready(p)]
+    if old:
+        db.update('characters', c['id'], status='ready', project=old[-1], remote_job=None,
+                  error=f'重新制作失败，已恢复为之前的版本：{error}'[-3000:])
+    else:
+        db.update('characters', c['id'], status='failed', error=error[-3000:])
 
 
 def tick_works():
@@ -1119,7 +1227,11 @@ def tick_works():
             except Busy:
                 pass
             except Rejected as e:
-                db.update('works', w['id'], status='failed', error=str(e))
+                if e.code == 409 and ('结果名称已存在' in str(e) or 'already exists' in str(e).lower()):
+                    # Result name taken in the project (shouldn't happen: names are unique per work) - pick a new one.
+                    db.update('works', w['id'], result_name=f'st_w{w["id"]}_{uuid.uuid4().hex[:6]}')
+                else:
+                    db.update('works', w['id'], status='failed', error=str(e))
             continue
         st = engine().status(w['remote_job'])
         s = st['status']
@@ -1159,8 +1271,15 @@ def tick_keyframes():
         if w['kf_status'] == 'waiting':
             if keyframe_route(w) == 'v2r':
                 try:
-                    jid = engine().submit(w['project'], 'keyframes', {
-                        'name': w['result_name'], 'replace': os.path.isfile(os.path.join(o, keyframes_store.AUTO_FILE))})
+                    try:
+                        jid = engine().submit(w['project'], 'keyframes', {
+                            'name': w['result_name'], 'replace': os.path.isfile(os.path.join(o, keyframes_store.AUTO_FILE))})
+                    except Rejected as e:
+                        if e.kind != 'has_candidates':
+                            raise
+                        # Candidates appeared since we looked (e.g. generated from the dashboard): the user asked
+                        # for a fresh auto-mark, so replace them (the dashboard keeps the old file as history).
+                        jid = engine().submit(w['project'], 'keyframes', {'name': w['result_name'], 'replace': True})
                     db.update('works', w['id'], kf_status='running', kf_job=jid)
                 except Busy:
                     pass
@@ -1280,6 +1399,7 @@ def worker_loop():
                 sync_characters()
                 last_sync = now()
             tick_characters()
+            tick_remakes()
             tick_works()
             tick_keyframes()
         except Exception:  # noqa: BLE001

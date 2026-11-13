@@ -64,7 +64,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // flip three more times -> back upright (4 x 90 = 360) then turn around twice (180) to face the other way
     for (let i = 0; i < 3; i++) { await ev("[...document.querySelectorAll('.orient-btn')].find(b => b.textContent.includes('前后翻转')).click()"); await sleep(250); }
     const s2 = await ev("document.querySelector('.orient-status').textContent");
-    assert.match(s2, /站着/, "upright again");
+    assert.match(s2, /请确认三点/, "upright again (no lying warning)");
     for (let i = 0; i < 2; i++) { await ev("[...document.querySelectorAll('.orient-btn')].find(b => b.textContent.includes('水平转身')).click()"); await sleep(250); }
     await sleep(600);
     await shot("orient_4_turned.png");

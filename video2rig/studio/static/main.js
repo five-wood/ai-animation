@@ -1,6 +1,6 @@
-import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=8";
-import { createViewer } from "./viewer-safe.js?v=8";
-import { openBench } from "./bench.js?v=8";
+import { api, upload, h, clear, toast, errorText, modal, confirmBox, statusBadge, fmtTime, fmtSize, dropZone, lightbox, ICON } from "./util.js?v=9";
+import { createViewer } from "./viewer-safe.js?v=9";
+import { openBench } from "./bench.js?v=9";
 
 const app = document.getElementById("app");
 const S = { user: null, config: null, cleanup: null };
@@ -393,13 +393,22 @@ function adminPage(main) {
         h("thead", h("tr", ["ID", "名称", "状态", "来源", "内部项目", "公开", "操作"].map((x) => h("th", x)))),
         h("tbody", d.characters.map((c) => h("tr",
           h("td", c.id), h("td", h("input.input", { value: c.name, style: { height: "30px", width: "160px" }, onchange: (e) => api(`/api/admin/characters/${c.id}`, { method: "PATCH", body: { name: e.target.value } }).then(() => toast("已改名", "ok")).catch((ex) => toast(errorText(ex), "err")) })),
-          h("td", statusBadge(c.status, c.progress ? `${c.status_text} ${c.progress.percent}%` : c.status_text)),
-          h("td", c.owner), h("td.mono", c.project || "-"),
+          h("td", statusBadge(c.status, c.progress ? `${c.status_text} ${c.progress.percent}%` : c.status_text),
+            c.remake && h("div", { style: { marginTop: "4px" } }, statusBadge("running", `重新制作中 ${c.remake.percent}%`)),
+            c.remake_failed && h("div", { style: { marginTop: "4px" } }, statusBadge("failed", "上次重新制作失败"))),
+          h("td", c.owner),
+          h("td.mono", c.project || "-",
+            c.pending_project && h("div", { style: { color: "var(--yellow)" } }, `→ ${c.pending_project}`),
+            c.prev_projects?.length ? h("div", { title: "以前的版本（保留在服务器上）" }, `旧：${c.prev_projects.join(", ")}`) : null),
           h("td", c.status === "ready" ? h("input", { type: "checkbox", checked: c.published, onchange: act(() => api(`/api/admin/characters/${c.id}`, { method: "PATCH", body: { published: !c.published } })) }) : "-"),
           h("td", h("div.row",
             ["pending_review", "failed", "uploaded"].includes(c.status) && h("button.btn.sm.primary", { onclick: act(() => api(`/api/admin/characters/${c.id}`, { method: "PATCH", body: { approve: true } })) }, c.status === "failed" ? "重新制作" : "开始制作"),
             c.status === "pending_review" && h("button.btn.sm", { onclick: act(() => api(`/api/admin/characters/${c.id}`, { method: "PATCH", body: { reject: true } })) }, "退回"),
-            c.status === "failed" && c.error_raw && h("button.btn.sm.ghost", { onclick: () => modal({ title: "失败原因", wide: true, body: h("pre.log", c.error_raw) }) }, "原因")))))))),
+            c.can_remake && h("button.btn.sm", { title: "在新项目里重新训练；完成前角色照常可用，完成后自动切换，旧版本保留", onclick: async (e) => {
+              if (!await confirmBox("重新制作角色", `“${c.name}”会在后台重新训练（约 30–60 分钟）。完成前用户照常使用现在的版本，完成后自动切换到新版本。已有作品不受影响。`, { ok: "开始重新制作" })) return;
+              await act(() => api(`/api/admin/characters/${c.id}`, { method: "PATCH", body: { remake: true } }))(e);
+            } }, "重新制作"),
+            (c.status === "failed" || c.remake_failed) && c.error_raw && h("button.btn.sm.ghost", { onclick: () => modal({ title: "失败原因", wide: true, body: h("pre.log", c.error_raw) }) }, "原因")))))))),
       h("h3.section-title", "用户"),
       h("div.panel-box", h("table.table",
         h("thead", h("tr", ["ID", "用户名", "身份", "作品", "注册", "最近登录", "操作"].map((x) => h("th", x)))),
